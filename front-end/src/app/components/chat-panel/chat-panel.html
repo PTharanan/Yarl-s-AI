@@ -1,0 +1,275 @@
+<!-- Chat Panel — Refined Layout & Spacing -->
+<div class="flex flex-col h-full bg-surface-sidebar relative overflow-hidden">
+
+  <!-- ===== Top Navigation Bar ===== -->
+  <div class="chat-header">
+    <!-- Logo + Branding -->
+    <div class="chat-header__brand">
+      <div class="chat-header__logo icon-center-rigid overflow-hidden">
+        <img src="/logo.png" alt="Yarl Logo" class="w-full h-full object-contain" />
+      </div>
+      <div class="chat-header__info">
+        <h1 class="chat-header__title">Yarl's AI</h1>
+        <div class="chat-header__status">
+          <span class="chat-header__status-dot">
+            <span class="chat-header__status-ping"
+              [class.!bg-blue-400]="selectedModel().toLowerCase().includes('gemini')"
+              [class.!bg-emerald-400]="!selectedModel().toLowerCase().includes('gemini')">
+            </span>
+            <span class="chat-header__status-solid"
+              [class.!bg-blue-500]="selectedModel().toLowerCase().includes('gemini')"
+              [class.!bg-emerald-500]="!selectedModel().toLowerCase().includes('gemini')">
+            </span>
+          </span>
+          <span class="chat-header__status-text">Ready</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="chat-header__actions relative">
+      <button (click)="startNewSession()" class="chat-header__action-btn" title="New Session">
+        <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+        </svg>
+      </button>
+      <div class="flex items-center gap-3">
+        <!-- Status Indicator Pill -->
+        <div class="flex items-center gap-2 px-3 py-1.5 bg-gray-50/50 rounded-full border border-gray-100 transition-all">
+          <div class="w-1.5 h-1.5 rounded-full animate-pulse" 
+            [class.bg-blue-500]="selectedModel().toLowerCase().includes('gemini')"
+            [class.!bg-emerald-500]="!selectedModel().toLowerCase().includes('gemini')">
+          </div>
+          <span class="text-[9px] font-black text-gray-500 uppercase tracking-wider">
+            {{ selectedModel().toLowerCase().includes('gemini') ? 'Cloud' : 'Local' }} Mode
+          </span>
+        </div>
+
+        <button (click)="toggleSettings()" class="text-gray-400 hover:text-gray-900 transition-colors p-2 hover:bg-gray-50 rounded-lg relative">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path>
+          </svg>
+        </button>
+
+        <!-- Backdrop for closing modal on click-outside -->
+        @if (showSettingsModal()) {
+          <div class="fixed inset-0 z-40 bg-transparent" (click)="toggleSettings()"></div>
+        }
+
+        <!-- Professional Model Picker (Refined based on img1) -->
+        @if (showSettingsModal()) {
+        <div class="absolute right-0 top-[125%] w-[260px] bg-white rounded-2xl shadow-[0_12px_44px_rgba(0,0,0,0.12)] border border-gray-100 py-2 z-50 animate-fade-in origin-top-right max-h-[450px] overflow-y-auto custom-scrollbar">
+          
+          <!-- Cloud Engine -->
+          <div class="px-2 mb-1">
+            @for (modelName of availableModels(); track modelName) {
+              @if (modelName.toLowerCase().includes('gemini')) {
+                <button (click)="onModelChange(modelName); toggleSettings()" 
+                  [class.bg-gray-50]="selectedModel() === modelName"
+                  class="w-full px-3 py-2.5 rounded-xl text-[13.5px] font-medium text-gray-700 hover:bg-gray-50 transition-all text-left flex items-center gap-3 group">
+                  <div class="flex-shrink-0 w-5 h-5 flex items-center justify-center text-gray-400 group-hover:text-blue-500" [class.text-blue-500]="selectedModel() === modelName">
+                    <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418"></path>
+                    </svg>
+                  </div>
+                  <span class="truncate flex-1">{{ modelName }}</span>
+                  @if (selectedModel() === modelName) {
+                    <div class="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                  }
+                </button>
+              }
+            }
+          </div>
+
+          <div class="h-px bg-gray-50 mx-2 my-1"></div>
+
+          <!-- Local Engine -->
+          <div class="px-2 mt-1">
+            @for (modelName of availableModels(); track modelName) {
+              @if (!modelName.toLowerCase().includes('gemini')) {
+                <button (click)="onModelChange(modelName); toggleSettings()" 
+                  [class.bg-gray-50]="selectedModel() === modelName"
+                  class="w-full px-3 py-2.5 rounded-xl text-[13.5px] font-medium text-gray-700 hover:bg-gray-50 transition-all text-left flex items-center gap-3 group">
+                  <div class="flex-shrink-0 w-5 h-5 flex items-center justify-center text-gray-400 group-hover:text-emerald-500" [class.text-emerald-500]="selectedModel() === modelName">
+                    <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3V3.75a3 3 0 013-3h13.5a3 3 0 013 3v7.5a3 3 0 01-3 3m-13.5 0v7.5a3 3 0 003 3h13.5a3 3 0 003-3v-7.5m-6.75-3h.008v.008h-.008v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"></path>
+                    </svg>
+                  </div>
+                  <span class="truncate flex-1">{{ modelName }}</span>
+                  @if (selectedModel() === modelName) {
+                    <div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                  }
+                </button>
+              }
+            }
+          </div>
+
+        </div>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Messages Area (Improved Margins) ===== -->
+  <div #messageContainer
+    class="chat-container-surface flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-10 scroll-smooth z-10">
+
+    @for (msg of messages(); track msg.id) {
+    <!-- Assistant Message (Left side) -->
+    @if (msg.role === 'assistant') {
+    <div class="message-group ai-message-group flex flex-col mb-10 animate-fade-in group">
+      <div class="sender-label-base">
+        <div class="icon-center-rigid w-10 h-10 rounded-full bg-#edeff2 overflow-hidden p-1 border border-gray-100">
+          <img src="/ai-logo.png" alt="Yarl AI" class="w-full h-full object-contain" />
+        </div>
+        <span>Yarl's AI</span>
+        @if (msg.model) {
+        <span
+          class="ml-2 px-2 py-0.5 bg-accent-glow text-accent-primary rounded-md text-[10px] uppercase font-black border border-accent-primary/10">
+          {{ msg.model }}
+        </span>
+        }
+      </div>
+
+      <div class="max-w-[85%]">
+        <div class="chat-bubble-base ai-message-bubble">
+          @if (msg.imageUrl) {
+          <img [src]="msg.imageUrl" alt="attachment"
+            class="rounded-xl mb-3 max-h-56 w-auto border border-border-subtle pointer-events-none" />
+          }
+          <p class="whitespace-pre-wrap">{{ msg.content }}</p>
+        </div>
+        <!-- Time on hover -->
+        <div class="time-display ml-1">{{ formatTime(msg.timestamp) }}</div>
+      </div>
+    </div>
+    }
+
+    <!-- User Message (Right side) -->
+    @if (msg.role === 'user') {
+    <div class="message-group flex flex-col mb-10 animate-fade-in group items-end">
+      <div class="sender-label-base user-label-right">
+        <span>You</span>
+        <div class="icon-center-rigid w-9 h-9 rounded-full bg-accent-primary shadow-md mr-4">
+          <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="max-w-[85%] flex flex-col items-end">
+        <div class="chat-bubble-base user-message-bubble">
+          @if (msg.imageUrl) {
+          <img [src]="msg.imageUrl" alt="attachment" class="rounded-xl mb-3 max-h-56 w-auto border border-white/20" />
+          }
+          <p class="whitespace-pre-wrap">{{ msg.content }}</p>
+        </div>
+        <!-- Time on hover -->
+        <div class="time-display mr-1">{{ formatTime(msg.timestamp) }}</div>
+      </div>
+    </div>
+    }
+    }
+
+    <!-- Typing Indicator -->
+    @if (isTyping()) {
+    <div class="flex flex-col mb-10 animate-fade-in">
+      <div class="sender-label-base">
+        <div class="icon-center-rigid w-9 h-9 rounded-full bg-white shadow-md overflow-hidden p-1 border border-gray-100">
+          <img src="/ai-logo.png" alt="Yarl AI" class="w-full h-full object-contain" />
+        </div>
+        <span>Yarl's AI</span>
+      </div>
+      <div class="chat-bubble-base ai-message-bubble w-fit">
+        <div class="flex items-center gap-3 px-1 py-1">
+          <span class="w-2.5 h-2.5 rounded-full bg-accent-primary/30 animate-bounce"
+            style="animation-duration: 1.2s; animation-delay: 0s;"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-accent-primary/50 animate-bounce"
+            style="animation-duration: 1.2s; animation-delay: 0.2s;"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-accent-primary animate-bounce"
+            style="animation-duration: 1.2s; animation-delay: 0.4s;"></span>
+        </div>
+      </div>
+    </div>
+    }
+  </div>
+
+  <!-- ===== Bottom Interaction Area ===== -->
+  <div class="bg-surface-sidebar relative z-20">
+
+    <!-- Upload Progress / Preview UI -->
+    @if (uploadedImagePreview()) {
+    <div class="mb-4 animate-fade-in">
+      <div
+        class="flex items-center gap-4 p-4 bg-white border border-border-active/20 rounded-2xl shadow-[0_4px_12px_rgba(37,99,235,0.06)]">
+        <div class="relative w-16 h-16 flex-shrink-0 group">
+          <img [src]="uploadedImagePreview()!" alt="preview"
+            class="w-full h-full object-cover rounded-xl border border-border-subtle" />
+          <div class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 rounded-xl transition-opacity">
+          </div>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-[13px] font-bold text-text-primary tracking-tight">Attachment Ready</p>
+          <p class="text-[11px] font-medium text-text-muted mt-0.5">Click send to include this image</p>
+        </div>
+        <button (click)="removeUploadedImage()"
+          class="p-2.5 rounded-xl text-text-muted hover:text-danger hover:bg-danger/10 transition-all cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    }
+
+    <!-- Primary Input Card (Refined Alignment & Around Space) -->
+    <div class="input-card-refined">
+      <div class="input-container-rigid">
+        <!-- File Trigger -->
+        <input #fileInput type="file" accept="image/*" class="hidden" (change)="onFileSelected($event)" />
+        <button (click)="triggerFileUpload()"
+          class="flex-shrink-0 p-2.5 rounded-xl text-text-muted hover:text-accent-primary hover:bg-accent-lighter transition-all cursor-pointer"
+          title="Add Image attachment">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+          </svg>
+        </button>
+
+        <!-- Message Logic -->
+        <textarea [(ngModel)]="inputText" (keydown)="onKeyDown($event)" placeholder="Type your message here"
+          [disabled]="isGenerating()"
+          class="flex-1 bg-transparent text-[15px] font-medium text-text-primary placeholder:text-text-muted/50 outline-none resize-none max-h-32 leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed"></textarea>
+
+        <!-- Send / Stop Button -->
+        @if (isGenerating()) {
+        <button (click)="stopGeneration()"
+          class="flex-shrink-0 p-3 rounded-xl bg-red-500 text-white shadow-lg shadow-red-500/20 cursor-pointer hover:bg-red-600 transition-all">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+            <rect x="6" y="6" width="12" height="12" rx="2" />
+          </svg>
+        </button>
+        } @else {
+        <button (click)="sendMessage()" [disabled]="!inputText.trim() && !uploadedImagePreview()"
+          class="send-button-blue flex-shrink-0 rounded-xl shadow-lg shadow-accent-primary/20 disabled:opacity-30 disabled:pointer-events-none cursor-pointer">
+          <svg class="w-5.5 h-5.5 -rotate-45" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+          </svg>
+        </button>
+        }
+      </div>
+    </div>
+
+    <!-- Accessibility Hints -->
+    <div
+      class="mt-4 px-4 flex justify-between items-center text-[10px] font-bold text-text-muted/60 uppercase tracking-[0.1em]">
+      <div class="flex gap-4">
+        <span><kbd class="text-text-muted bg-surface-tertiary px-1 rounded">Enter</kbd> SEND</span>
+        <span><kbd class="text-text-muted bg-surface-tertiary px-1 rounded">Shift + Enter</kbd> NEW LINE</span>
+      </div>
+      <div>AI may produce inaccurate info</div>
+    </div>
+  </div>
+</div>

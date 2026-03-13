@@ -1,0 +1,13 @@
+<!-- AI Code Studio — Split Screen Layout -->
+<div class="flex h-screen w-screen overflow-hidden bg-surface-primary">
+
+  <!-- Left Panel: Chat (30%) -->
+  <aside class="w-[30%] min-w-[340px] h-full relative flex-shrink-0 border-r border-border-subtle">
+    <app-chat-panel (htmlCodeGenerated)="onHtmlCodeGenerated($event)"></app-chat-panel>
+  </aside>
+
+  <!-- Right Panel: Preview (70%) -->
+  <main class="flex-1 h-full min-w-0">
+    <app-preview-panel [htmlCode]="generatedHtml()"></app-preview-panel>
+  </main>
+</div>

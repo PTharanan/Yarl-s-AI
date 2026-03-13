@@ -1,0 +1,111 @@
+<!-- Preview Panel — Refined Layout & Spacing -->
+<div class="flex flex-col h-full bg-white relative overflow-hidden">
+
+  <!-- ===== Top Navigation Bar ===== -->
+  <div class="preview-header">
+
+    <!-- Tab Switcher -->
+    <div class="preview-header__tabs">
+      <button (click)="setTab('preview')"
+              class="preview-header__tab"
+              [class.preview-header__tab--active]="activeTab() === 'preview'">
+        <svg class="preview-header__tab-icon" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        Preview
+      </button>
+      <button (click)="setTab('code')"
+              class="preview-header__tab"
+              [class.hidden]="!htmlCode"
+              [class.preview-header__tab--active]="activeTab() === 'code'">
+        <svg class="preview-header__tab-icon" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"/>
+        </svg>
+        Code
+      </button>
+    </div>
+
+    <!-- Live Status Indicator -->
+    <div class="preview-header__status">
+      @if (isLoading()) {
+        <span class="preview-header__status-dot preview-header__status-dot--syncing"></span>
+        <span class="preview-header__status-label preview-header__status-label--syncing">Syncing</span>
+      } @else if (hasContent()) {
+        <span class="preview-header__status-dot preview-header__status-dot--live">
+          <span class="preview-header__status-ping"></span>
+          <span class="preview-header__status-solid preview-header__status-solid--live"></span>
+        </span>
+        <span class="preview-header__status-label preview-header__status-label--live">Live</span>
+      } @else {
+        <span class="preview-header__status-dot preview-header__status-dot--idle"></span>
+        <span class="preview-header__status-label preview-header__status-label--idle">Idle</span>
+      }
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="preview-header__actions">
+      <button (click)="downloadHtml()" class="preview-header__action-btn" title="Download Source">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+        </svg>
+      </button>
+      <button (click)="refreshPreview()" class="preview-header__action-btn" title="Hot Reload">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M21.015 4.356v4.992"/>
+        </svg>
+      </button>
+      <button (click)="copyCode()" class="preview-header__action-btn" title="Copy Code">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== Main Surface ===== -->
+  <div class="flex-1 relative overflow-hidden bg-white">
+
+    <!-- Render Loader -->
+    @if (isLoading()) {
+      <div class="absolute inset-0 z-30 bg-white/60 backdrop-blur-md flex items-center justify-center animate-fade-in">
+        <div class="flex flex-col items-center gap-5">
+          <div class="relative w-12 h-12">
+            <div class="absolute inset-0 border-4 border-accent-lighter rounded-full"></div>
+            <div class="absolute inset-0 border-4 border-transparent border-t-accent-primary rounded-full animate-spin"></div>
+          </div>
+          <span class="text-[13px] font-bold text-text-primary uppercase tracking-widest">Compiling Preview</span>
+        </div>
+      </div>
+    }
+
+    <!-- Live Preview Display -->
+    <div [class.hidden]="activeTab() !== 'preview'" class="h-full z-10 transition-opacity duration-300">
+      <iframe title="AI Preview Host"
+              class="w-full h-full border-0 bg-white"
+              sandbox="allow-scripts allow-same-origin"
+              [srcdoc]="sanitizedHtml()">
+      </iframe>
+    </div>
+
+    <!-- Code Editor View -->
+    <div [class.hidden]="activeTab() !== 'code'" class="h-full overflow-hidden p-6 z-10 animate-fade-in bg-white">
+      @if (htmlCode) {
+        <div class="relative h-full ring-1 ring-border-subtle rounded-2xl overflow-hidden shadow-sm">
+          <div class="absolute top-0 left-0 right-0 h-1 bg-accent-primary/20"></div>
+          <pre class="text-[13px] leading-[1.8] font-mono text-text-primary bg-surface-tertiary/30 p-8 h-full overflow-auto whitespace-pre-wrap break-words custom-editor-font"><code>{{ htmlCode }}</code></pre>
+        </div>
+      } @else {
+        <div class="h-full flex items-center justify-center">
+          <div class="flex flex-col items-center gap-3 text-center">
+            <svg class="w-12 h-12 text-text-muted/30" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"/>
+            </svg>
+            <p class="text-[13px] font-semibold text-text-muted/50">No code generated yet</p>
+            <p class="text-[11px] text-text-muted/40">Send a prompt to see the code here</p>
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+</div>

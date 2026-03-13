@@ -1,0 +1,218 @@
+/* ===== Google Fonts Import ===== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@import "tailwindcss";
+
+/* ===== Light Professional Theme — Blue & White ===== */
+@theme {
+  /* Surface Colors — Clean whites and soft greys */
+  --color-surface-primary: #ffffff;
+  --color-surface-secondary: #f8fafd;
+  --color-surface-tertiary: #f0f4f9;
+  --color-surface-elevated: #ffffff;
+  --color-surface-glass: rgba(255, 255, 255, 0.85);
+  --color-surface-sidebar: #edeff2;
+
+  /* Border Colors */
+  --color-border-subtle: #e5eaf2;
+  --color-border-medium: #d0d9e6;
+  --color-border-active: #2563eb;
+
+  /* Accent Colors — Professional Blue */
+  --color-accent-primary: #2563eb;
+  --color-accent-secondary: #1d4ed8;
+  --color-accent-tertiary: #3b82f6;
+  --color-accent-light: #dbeafe;
+  --color-accent-lighter: #eff6ff;
+  --color-accent-glow: rgba(37, 99, 235, 0.08);
+
+  /* Text Colors */
+  --color-text-primary: #111827;
+  --color-text-secondary: #4b5563;
+  --color-text-muted: #6b7280;
+  --color-text-inverse: #ffffff;
+
+  /* Status Colors */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+
+  /* Fonts */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ===== Base Resets ===== */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  background: var(--color-surface-primary);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===== Custom Scrollbar ===== */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* ===== Selection ===== */
+::selection {
+  background: var(--color-accent-primary);
+  color: white;
+}
+
+/* ===== Utility Animations ===== */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ===== Expert AI Studio Chat Design ===== */
+
+.icon-center-rigid {
+  display: grid !important;
+  place-items: center !important;
+  line-height: normal !important;
+}
+
+.chat-bubble-base {
+  padding: 14px 28px !important; /* Increased horizontal padding */
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  line-height: 1.5 !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02) !important;
+  border-radius: 24px !important; /* Smoother rounding */
+  position: relative !important;
+}
+
+.ai-message-bubble {
+  background-color: white !important;
+  border: 1px solid #eef2f6 !important;
+  border-top-left-radius: 0px !important; /* ULTRA-SHARP TAIL AI */
+  color: #1e293b !important;
+  margin-left: 20px !important; /* "Around space" left side */
+  margin-right: 20px !important; /* "Around space" right side */
+}
+
+.user-message-bubble {
+  background-color: #2563eb !important;
+  color: white !important;
+  border-top-right-radius: 0px !important;
+  min-width: 80px !important; /* Reduced further for perfection */
+  margin-right: 20px !important; /* "Around space" right side */
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1) !important;
+  text-align: center !important; /* Center text in small bubbles */
+}
+
+.sender-label-base {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  text-transform: none !important; /* Match sample casing */
+  margin-bottom: 6px !important;
+  color: #64748b !important;
+}
+
+.ai-message-group {
+  padding-left: 24px !important;
+  padding-right: 10px !important;
+}
+
+.user-label-right {
+  justify-content: flex-end !important;
+}
+
+/* Chat Container Polish */
+.chat-container-surface {
+  background-color: #edeff2 !important;
+  overflow-x: hidden !important; /* No horizontal scroll */
+}
+
+/* Hover-only Time Display */
+.time-display {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+.message-group:hover .time-display {
+  opacity: 1;
+}
+
+/* Input Area Polish */
+.input-card-refined {
+  margin: 12px 24px 28px 24px !important;
+  border-radius: 16px !important;
+  padding: 10px 20px !important; /* Increased "Around space" */
+  min-height: 56px !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.03) !important;
+  display: flex !important;
+  align-items: center !important;
+  background-color: white !important;
+}
+
+.input-container-rigid {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  gap: 16px !important; /* Spacing between items */
+}
+
+/* Ensure Textarea baseline matches icons */
+.input-card-refined textarea {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  margin: 0 !important;
+  line-height: 44px !important;
+  min-height: 44px !important;
+  height: 44px !important;
+}
+
+.send-button-blue {
+  background-color: #2563eb !important;
+  color: white !important;
+  width: 44px !important;
+  height: 44px !important;
+  display: grid !important;
+  place-items: center !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.send-button-blue:hover {
+  background-color: #1d4ed8 !important;
+  transform: scale(1.05);
+}
