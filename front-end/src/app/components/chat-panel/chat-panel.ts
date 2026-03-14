@@ -58,6 +58,12 @@ export class ChatPanel implements AfterViewChecked, OnInit {
   
   availableModels = signal<string[]>([]);
   selectedModel = signal('deepseek-coder:6.7b');
+  cloudModels = computed(() =>
+    this.availableModels().filter((modelName) => modelName.toLowerCase().includes('gemini'))
+  );
+  localModels = computed(() =>
+    this.availableModels().filter((modelName) => !modelName.toLowerCase().includes('gemini'))
+  );
 
   private nextId = 2;
   private shouldScroll = false;
@@ -127,7 +133,8 @@ export class ChatPanel implements AfterViewChecked, OnInit {
         this.currentRequest = null;
         this.shouldScroll = true;
         
-        if (response.html) {
+        const shouldUpdatePreview = response.is_web_output ?? Boolean(response.html);
+        if (shouldUpdatePreview && response.html) {
           this.lastGeneratedHtml = response.html;
           this.htmlCodeGenerated.emit(response.html);
         }
