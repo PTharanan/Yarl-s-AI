@@ -33,9 +33,9 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
         </svg>
       </button>
-      <div class="flex items-center gap-3">
+      <div class="chat-header__controls flex items-center gap-3">
         <!-- Status Indicator Pill -->
-        <div class="flex items-center gap-2 px-3 py-1.5 bg-gray-50/50 rounded-full border border-gray-100 transition-all">
+        <div class="chat-mode-pill flex items-center gap-2 px-3 py-1.5 bg-gray-50/50 rounded-full border border-gray-100 transition-all">
           <div class="w-1.5 h-1.5 rounded-full animate-pulse" 
             [class.bg-blue-500]="selectedModel().toLowerCase().includes('gemini')"
             [class.!bg-emerald-500]="!selectedModel().toLowerCase().includes('gemini')">
@@ -45,67 +45,111 @@
           </span>
         </div>
 
-        <button (click)="toggleSettings()" class="text-gray-400 hover:text-gray-900 transition-colors p-2 hover:bg-gray-50 rounded-lg relative">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path>
-          </svg>
-        </button>
+        <div class="settings-dropdown-shell">
+          <button
+            (click)="toggleSettings()"
+            class="chat-header__action-btn settings-trigger"
+            [class.settings-trigger--active]="showSettingsModal()"
+            [attr.aria-expanded]="showSettingsModal()"
+            aria-haspopup="menu"
+            aria-label="Open model settings">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path>
+            </svg>
+          </button>
 
-        <!-- Backdrop for closing modal on click-outside -->
-        @if (showSettingsModal()) {
-          <div class="fixed inset-0 z-40 bg-transparent" (click)="toggleSettings()"></div>
-        }
+          <!-- Backdrop for closing modal on click-outside -->
+          @if (showSettingsModal()) {
+            <div class="fixed inset-0 z-40 bg-transparent" (click)="toggleSettings()"></div>
+          }
 
-        <!-- Professional Model Picker (Refined based on img1) -->
-        @if (showSettingsModal()) {
-        <div class="absolute right-0 top-[125%] w-[260px] bg-white rounded-2xl shadow-[0_12px_44px_rgba(0,0,0,0.12)] border border-gray-100 py-2 z-50 animate-fade-in origin-top-right max-h-[450px] overflow-y-auto custom-scrollbar">
-          
-          <!-- Cloud Engine -->
-          <div class="px-2 mb-1">
-            @for (modelName of availableModels(); track modelName) {
-              @if (modelName.toLowerCase().includes('gemini')) {
-                <button (click)="onModelChange(modelName); toggleSettings()" 
-                  [class.bg-gray-50]="selectedModel() === modelName"
-                  class="w-full px-3 py-2.5 rounded-xl text-[13.5px] font-medium text-gray-700 hover:bg-gray-50 transition-all text-left flex items-center gap-3 group">
-                  <div class="flex-shrink-0 w-5 h-5 flex items-center justify-center text-gray-400 group-hover:text-blue-500" [class.text-blue-500]="selectedModel() === modelName">
-                    <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418"></path>
-                    </svg>
-                  </div>
-                  <span class="truncate flex-1">{{ modelName }}</span>
-                  @if (selectedModel() === modelName) {
-                    <div class="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+          <!-- Model Picker Dropdown -->
+          @if (showSettingsModal()) {
+          <div class="model-dropdown z-50 animate-fade-in" role="menu" aria-label="Model selector">
+            <div class="model-dropdown__header">
+              <div class="model-dropdown__heading-wrap">
+                <p class="model-dropdown__title">Model Selector</p>
+                <p class="model-dropdown__subtitle">Choose the engine used for responses</p>
+              </div>
+              <span class="model-dropdown__active-chip" title="{{ selectedModel() }}">{{ selectedModel() }}</span>
+            </div>
+
+            @if (availableModels().length === 0) {
+              <div class="model-dropdown__empty">No models available</div>
+            } @else {
+              <div class="model-dropdown__section">
+                <p class="model-dropdown__section-title">
+                  <span class="model-dropdown__section-dot model-dropdown__section-dot--cloud"></span>
+                  Cloud Models
+                </p>
+
+                <div class="model-dropdown__list">
+                  @for (modelName of cloudModels(); track modelName) {
+                    <button
+                      (click)="onModelChange(modelName); toggleSettings()"
+                      class="model-option model-option--cloud"
+                      [class.model-option--active]="selectedModel() === modelName"
+                      role="menuitemradio"
+                      [attr.aria-checked]="selectedModel() === modelName">
+                      <span class="model-option__icon model-option__icon--cloud">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582"></path>
+                        </svg>
+                      </span>
+                      <span class="model-option__name">{{ modelName }}</span>
+                      @if (selectedModel() === modelName) {
+                        <span class="model-option__check model-option__check--cloud">
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
+                          </svg>
+                        </span>
+                      }
+                    </button>
+                  } @empty {
+                    <p class="model-dropdown__empty-row">No cloud models</p>
                   }
-                </button>
-              }
+                </div>
+              </div>
+
+              <div class="model-dropdown__divider"></div>
+
+              <div class="model-dropdown__section">
+                <p class="model-dropdown__section-title">
+                  <span class="model-dropdown__section-dot model-dropdown__section-dot--local"></span>
+                  Local Models
+                </p>
+
+                <div class="model-dropdown__list">
+                  @for (modelName of localModels(); track modelName) {
+                    <button
+                      (click)="onModelChange(modelName); toggleSettings()"
+                      class="model-option model-option--local"
+                      [class.model-option--active]="selectedModel() === modelName"
+                      role="menuitemradio"
+                      [attr.aria-checked]="selectedModel() === modelName">
+                      <span class="model-option__icon model-option__icon--local">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3V3.75a3 3 0 013-3h13.5a3 3 0 013 3v7.5a3 3 0 01-3 3m-13.5 0v7.5a3 3 0 003 3h13.5a3 3 0 003-3v-7.5"></path>
+                        </svg>
+                      </span>
+                      <span class="model-option__name">{{ modelName }}</span>
+                      @if (selectedModel() === modelName) {
+                        <span class="model-option__check model-option__check--local">
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
+                          </svg>
+                        </span>
+                      }
+                    </button>
+                  } @empty {
+                    <p class="model-dropdown__empty-row">No local models</p>
+                  }
+                </div>
+              </div>
             }
           </div>
-
-          <div class="h-px bg-gray-50 mx-2 my-1"></div>
-
-          <!-- Local Engine -->
-          <div class="px-2 mt-1">
-            @for (modelName of availableModels(); track modelName) {
-              @if (!modelName.toLowerCase().includes('gemini')) {
-                <button (click)="onModelChange(modelName); toggleSettings()" 
-                  [class.bg-gray-50]="selectedModel() === modelName"
-                  class="w-full px-3 py-2.5 rounded-xl text-[13.5px] font-medium text-gray-700 hover:bg-gray-50 transition-all text-left flex items-center gap-3 group">
-                  <div class="flex-shrink-0 w-5 h-5 flex items-center justify-center text-gray-400 group-hover:text-emerald-500" [class.text-emerald-500]="selectedModel() === modelName">
-                    <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3V3.75a3 3 0 013-3h13.5a3 3 0 013 3v7.5a3 3 0 01-3 3m-13.5 0v7.5a3 3 0 003 3h13.5a3 3 0 003-3v-7.5m-6.75-3h.008v.008h-.008v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"></path>
-                    </svg>
-                  </div>
-                  <span class="truncate flex-1">{{ modelName }}</span>
-                  @if (selectedModel() === modelName) {
-                    <div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                  }
-                </button>
-              }
-            }
-          </div>
-
+          }
         </div>
-        }
       </div>
     </div>
   </div>
@@ -263,13 +307,18 @@
     </div>
 
     <!-- Accessibility Hints -->
-    <div
-      class="mt-4 px-4 flex justify-between items-center text-[10px] font-bold text-text-muted/60 uppercase tracking-[0.1em]">
-      <div class="flex gap-4">
-        <span><kbd class="text-text-muted bg-surface-tertiary px-1 rounded">Enter</kbd> SEND</span>
-        <span><kbd class="text-text-muted bg-surface-tertiary px-1 rounded">Shift + Enter</kbd> NEW LINE</span>
+    <div class="accessibility-hints mt-4 px-4 flex justify-between items-center text-[10px] font-bold text-text-muted/60 uppercase tracking-[0.1em]">
+      <div class="accessibility-hints__keys flex gap-4">
+        <span class="accessibility-hints__item">
+          <kbd class="accessibility-hints__kbd text-text-muted bg-surface-tertiary px-1 rounded">Enter</kbd>
+          <span>SEND</span>
+        </span>
+        <span class="accessibility-hints__item">
+          <kbd class="accessibility-hints__kbd text-text-muted bg-surface-tertiary px-1 rounded">Shift + Enter</kbd>
+          <span>NEW LINE</span>
+        </span>
       </div>
-      <div>AI may produce inaccurate info</div>
+      <div class="accessibility-hints__notice">AI may produce inaccurate info</div>
     </div>
   </div>
 </div>
