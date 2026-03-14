@@ -11,8 +11,13 @@ import { PreviewPanel } from './components/preview-panel/preview-panel';
 })
 export class App {
   generatedHtml = signal('');
+  mobileActivePane = signal<'chat' | 'preview'>('chat');
 
   onHtmlCodeGenerated(code: string): void {
     this.generatedHtml.set(code);
+  }
+
+  setMobilePane(pane: 'chat' | 'preview'): void {
+    this.mobileActivePane.set(pane);
   }
 }

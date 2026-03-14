@@ -13,6 +13,8 @@ export interface ChatRequest {
 export interface ChatResponse {
   html: string;
   message: string;
+  is_web_output?: boolean;
+  model_used?: string;
 }
 
 @Injectable({
@@ -20,9 +22,11 @@ export interface ChatResponse {
 })
 export class ApiService {
   private http = inject(HttpClient);
-  private apiUrl = 'http://127.0.0.1:8000/api/generate/';
-  private stopUrl = 'http://127.0.0.1:8000/api/stop/';
-  private modelsUrl = 'http://127.0.0.1:8000/api/models/';
+  private backendHost = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
+  private apiBaseUrl = `http://${this.backendHost}:8000/api`;
+  private apiUrl = `${this.apiBaseUrl}/generate/`;
+  private stopUrl = `${this.apiBaseUrl}/stop/`;
+  private modelsUrl = `${this.apiBaseUrl}/models/`;
 
   sendMessage(request: ChatRequest): Observable<ChatResponse> {
     return this.http.post<ChatResponse>(this.apiUrl, request).pipe(

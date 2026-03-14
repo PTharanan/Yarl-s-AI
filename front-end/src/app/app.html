@@ -1,13 +1,42 @@
-<!-- AI Code Studio — Split Screen Layout -->
-<div class="flex h-screen w-screen overflow-hidden bg-surface-primary">
+<!-- AI Code Studio — Responsive Split Layout -->
+<div class="app-shell flex h-screen w-screen overflow-hidden bg-surface-primary">
 
-  <!-- Left Panel: Chat (30%) -->
-  <aside class="w-[30%] min-w-[340px] h-full relative flex-shrink-0 border-r border-border-subtle">
+  <!-- Left Panel: Chat (Desktop 30%, Mobile Full Pane) -->
+  <aside
+    class="app-chat-pane w-[30%] min-w-[340px] h-full relative flex-shrink-0 border-r border-border-subtle"
+    [class.app-pane--mobile-hidden]="mobileActivePane() !== 'chat'">
     <app-chat-panel (htmlCodeGenerated)="onHtmlCodeGenerated($event)"></app-chat-panel>
   </aside>
 
-  <!-- Right Panel: Preview (70%) -->
-  <main class="flex-1 h-full min-w-0">
+  <!-- Right Panel: Preview (Desktop 70%, Mobile Full Pane) -->
+  <main
+    class="app-preview-pane flex-1 h-full min-w-0"
+    [class.app-pane--mobile-hidden]="mobileActivePane() !== 'preview'">
     <app-preview-panel [htmlCode]="generatedHtml()"></app-preview-panel>
   </main>
+
+  <!-- Mobile Bottom Navigation -->
+  <nav class="mobile-pane-switcher" aria-label="Mobile view switcher">
+    <button
+      type="button"
+      class="mobile-pane-switcher__btn"
+      [class.mobile-pane-switcher__btn--active]="mobileActivePane() === 'chat'"
+      (click)="setMobilePane('chat')">
+      <svg class="mobile-pane-switcher__icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 9.75h6.75m-6.75 3h4.5m7.875-1.5c0 4.97-4.533 9-10.125 9a10.5 10.5 0 01-4.117-.835L3 20.25l1.232-3.695A8.96 8.96 0 013.375 11.25c0-4.97 4.533-9 10.125-9S23.625 6.28 23.625 11.25z" />
+      </svg>
+      <span>Chat</span>
+    </button>
+    <button
+      type="button"
+      class="mobile-pane-switcher__btn"
+      [class.mobile-pane-switcher__btn--active]="mobileActivePane() === 'preview'"
+      (click)="setMobilePane('preview')">
+      <svg class="mobile-pane-switcher__icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+      <span>Preview</span>
+    </button>
+  </nav>
 </div>
