@@ -29,7 +29,21 @@ for env_path in POSSIBLE_DOTENV_PATHS:
         print(f"✅ Loaded environment from: {env_path}")
         break
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+def refresh_runtime_env():
+    """Reload env vars so .env edits are reflected without a process restart."""
+    for env_path in POSSIBLE_DOTENV_PATHS:
+        if env_path.exists():
+            load_dotenv(dotenv_path=str(env_path), override=True)
+            break
+
+
+def get_gemini_api_key():
+    refresh_runtime_env()
+    return os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+
+
+GEMINI_API_KEY = get_gemini_api_key()
 OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://127.0.0.1:11434').rstrip('/')
 OLLAMA_GENERATE_URL = f"{OLLAMA_BASE_URL}/api/generate"
 OLLAMA_CHAT_URL = f"{OLLAMA_BASE_URL}/api/chat"
@@ -39,9 +53,9 @@ if GEMINI_API_KEY and genai is not None:
     genai.configure(api_key=GEMINI_API_KEY)
     print("✅ Gemini AI services are active.")
 elif GEMINI_API_KEY and genai is None:
-    print("⚠️ GEMINI_API_KEY found, but google-generativeai is not installed. Gemini routes are disabled.")
+    print("⚠️ Gemini API key found, but google-generativeai is not installed. Gemini routes are disabled.")
 else:
-    print("⚠️ GEMINI_API_KEY not found. Gemini models will be available but may fail on request.")
+    print("⚠️ Gemini API key not found. Gemini models will be unavailable.")
 
 SYSTEM_PROMPT = """You are Yarl's Web AI, a professional web developer.
 
@@ -201,6 +215,7 @@ def extract_html(text):
 
 class GenerateView(APIView):
     def post(self, request):
+        gemini_api_key = get_gemini_api_key()
         raw_prompt = request.data.get('prompt', '')
         image = request.data.get('image', None)
         previous_html = request.data.get('previousHtml', '')
@@ -241,8 +256,9 @@ class GenerateView(APIView):
         if 'gemini' in selected_model.lower():
             if genai is None:
                 return Response({'error': 'Gemini support is unavailable because google-generativeai is not installed in the backend environment.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            if not os.getenv("GEMINI_API_KEY"):
+            if not gemini_api_key:
                 return Response({'error': 'Gemini API Key missing in backend .env'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            genai.configure(api_key=gemini_api_key)
             
             try:
                 # Use standard model names with -latest for better stability
@@ -339,32 +355,38 @@ class StopGenerationView(APIView):
 class ListModelsView(APIView):
     def get(self, request):
         """Returns a list of both Cloud (Gemini) and Local models."""
+        gemini_api_key = get_gemini_api_key()
+
+        cloud_models = []
+        local_models = []
         models = []
         
         # --- 1. Dynamic Cloud Models (Fetch from Gemini API) ---
-        if os.getenv("GEMINI_API_KEY") and genai is not None:
+        if gemini_api_key and genai is not None:
             try:
+                genai.configure(api_key=gemini_api_key)
                 requested_gems = ['gemini-3-flash', 'gemini-2.5-flash', 'gemini-3.1-pro', 'gemini-3.1-flash-image', 'gemini-3-flash-preview']
                 for m in genai.list_models():
                     if 'generateContent' in m.supported_generation_methods:
                         name = m.name.replace('models/', '')
                         # Only include if it matches the requested list
                         if any(req in name.lower() for req in requested_gems):
-                            models.append(name)
+                            cloud_models.append(name)
                 
                 # If the search didn't find them but the user explicitly wants them, 
                 # ensure we show at least their requested versions if the API allows.
-                if not any('gemini' in m for m in models):
-                    models.extend([g for g in requested_gems if 'image' not in g])
+                if not any('gemini' in m for m in cloud_models):
+                    cloud_models.extend([g for g in requested_gems if 'image' not in g])
                 
                 # If the search didn't find them, add them manually as a safety fallback
-                if not any('gemini' in m for m in models):
-                    models.extend(['gemini-1.5-flash', 'gemini-1.5-pro'])
+                if not any('gemini' in m for m in cloud_models):
+                    cloud_models.extend(['gemini-1.5-flash', 'gemini-1.5-pro'])
             except Exception as e:
                 print(f"⚠️ Could not fetch Gemini models: {e}")
-                models.extend(['gemini-1.5-flash', 'gemini-1.5-pro'])
-        elif os.getenv("GEMINI_API_KEY") and genai is None:
+                cloud_models.extend(['gemini-1.5-flash', 'gemini-1.5-pro'])
+        elif gemini_api_key and genai is None:
             print("⚠️ Gemini API key exists but google-generativeai is not installed.")
+            cloud_models.extend(['gemini-1.5-flash', 'gemini-1.5-pro'])
         
         # --- 2. Local Models (Fetch from Ollama) ---
         try:
@@ -372,11 +394,20 @@ class ListModelsView(APIView):
             if response.status_code == 200:
                 data = response.json()
                 ollama_models = [m['name'] for m in data.get('models', []) if 'moondream' not in m['name'].lower()]
-                models.extend(ollama_models)
+                local_models.extend(ollama_models)
         except:
             # Fallback if Ollama is not local but we want to show the option
-            models.extend(['deepseek-coder:6.7b', 'qwen3-vl:8b'])
+            local_models.extend(['deepseek-coder:6.7b', 'qwen3-vl:8b'])
             
-        # Deduplicate and ensure at least one model exists
-        models = list(dict.fromkeys(models))
-        return Response({'models': models}, status=status.HTTP_200_OK)
+        cloud_models = list(dict.fromkeys(cloud_models))
+        local_models = list(dict.fromkeys(local_models))
+        models = list(dict.fromkeys(cloud_models + local_models))
+
+        return Response(
+            {
+                'models': models,
+                'cloud_models': cloud_models,
+                'local_models': local_models,
+            },
+            status=status.HTTP_200_OK
+        )

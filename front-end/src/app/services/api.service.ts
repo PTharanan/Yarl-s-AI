@@ -17,6 +17,20 @@ export interface ChatResponse {
   model_used?: string;
 }
 
+export type ModelEntry =
+  | string
+  | {
+      name?: string;
+      id?: string;
+      model?: string;
+    };
+
+export interface ModelsResponse {
+  models?: ModelEntry[];
+  cloud_models?: ModelEntry[];
+  local_models?: ModelEntry[];
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -52,11 +66,11 @@ export class ApiService {
     );
   }
 
-  getModels(): Observable<{ models: string[] }> {
-    return this.http.get<{ models: string[] }>(this.modelsUrl).pipe(
+  getModels(): Observable<ModelsResponse> {
+    return this.http.get<ModelsResponse>(this.modelsUrl).pipe(
       catchError(error => {
         console.error('Failed to fetch models:', error);
-        return of({ models: ['deepseek-coder:6.7b'] }); // Fallback
+        return of({ models: ['deepseek-coder:6.7b'], cloud_models: [], local_models: ['deepseek-coder:6.7b'] }); // Fallback
       })
     );
   }

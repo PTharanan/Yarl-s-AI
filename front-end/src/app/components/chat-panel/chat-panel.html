@@ -13,12 +13,12 @@
         <div class="chat-header__status">
           <span class="chat-header__status-dot">
             <span class="chat-header__status-ping"
-              [class.!bg-blue-400]="selectedModel().toLowerCase().includes('gemini')"
-              [class.!bg-emerald-400]="!selectedModel().toLowerCase().includes('gemini')">
+              [class.!bg-blue-400]="isCloudSelected()"
+              [class.!bg-emerald-400]="!isCloudSelected()">
             </span>
             <span class="chat-header__status-solid"
-              [class.!bg-blue-500]="selectedModel().toLowerCase().includes('gemini')"
-              [class.!bg-emerald-500]="!selectedModel().toLowerCase().includes('gemini')">
+              [class.!bg-blue-500]="isCloudSelected()"
+              [class.!bg-emerald-500]="!isCloudSelected()">
             </span>
           </span>
           <span class="chat-header__status-text">Ready</span>
@@ -37,11 +37,11 @@
         <!-- Status Indicator Pill -->
         <div class="chat-mode-pill flex items-center gap-2 px-3 py-1.5 bg-gray-50/50 rounded-full border border-gray-100 transition-all">
           <div class="w-1.5 h-1.5 rounded-full animate-pulse" 
-            [class.bg-blue-500]="selectedModel().toLowerCase().includes('gemini')"
-            [class.!bg-emerald-500]="!selectedModel().toLowerCase().includes('gemini')">
+            [class.bg-blue-500]="isCloudSelected()"
+            [class.!bg-emerald-500]="!isCloudSelected()">
           </div>
           <span class="text-[9px] font-black text-gray-500 uppercase tracking-wider">
-            {{ selectedModel().toLowerCase().includes('gemini') ? 'Cloud' : 'Local' }} Mode
+            {{ isCloudSelected() ? 'Cloud' : 'Local' }} Mode
           </span>
         </div>
 
