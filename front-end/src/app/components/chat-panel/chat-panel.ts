@@ -12,7 +12,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
-import { ApiService, ChatRequest, ChatResponse } from '../../services/api.service';
+import { ApiService, ChatRequest, ChatResponse, ModelEntry, ModelsResponse } from '../../services/api.service';
 import { Subscription } from 'rxjs';
 
 export interface ChatMessage {
@@ -58,12 +58,18 @@ export class ChatPanel implements AfterViewChecked, OnInit {
   
   availableModels = signal<string[]>([]);
   selectedModel = signal('deepseek-coder:6.7b');
-  cloudModels = computed(() =>
-    this.availableModels().filter((modelName) => modelName.toLowerCase().includes('gemini'))
-  );
-  localModels = computed(() =>
-    this.availableModels().filter((modelName) => !modelName.toLowerCase().includes('gemini'))
-  );
+  cloudModels = signal<string[]>([]);
+  localModels = signal<string[]>([]);
+  isCloudSelected = computed(() => {
+    const selected = this.selectedModel();
+    if (this.cloudModels().includes(selected)) {
+      return true;
+    }
+    if (this.localModels().includes(selected)) {
+      return false;
+    }
+    return this.isLikelyCloudModel(selected);
+  });
 
   private nextId = 2;
   private shouldScroll = false;
@@ -72,13 +78,28 @@ export class ChatPanel implements AfterViewChecked, OnInit {
   messageCount = computed(() => this.messages().length);
 
   ngOnInit(): void {
-    this.apiService.getModels().subscribe(data => {
-      if (data.models && data.models.length > 0) {
-        this.availableModels.set(data.models);
-        // If current default isn't in the list, pick the first available
-        if (!data.models.includes(this.selectedModel())) {
-          this.selectedModel.set(data.models[0]);
-        }
+    this.apiService.getModels().subscribe((data: ModelsResponse) => {
+      const allModels = this.normalizeModelList(data.models ?? []);
+      let cloudModels = this.normalizeModelList(data.cloud_models ?? []);
+      let localModels = this.normalizeModelList(data.local_models ?? []);
+
+      // Backward compatibility for older API payloads that only return a flat models list.
+      if (cloudModels.length === 0 && localModels.length === 0) {
+        cloudModels = allModels.filter((modelName) => this.isLikelyCloudModel(modelName));
+        localModels = allModels.filter((modelName) => !cloudModels.includes(modelName));
+      }
+
+      const mergedModels = this.uniqueModels([...cloudModels, ...localModels, ...allModels]);
+      if (mergedModels.length === 0) {
+        return;
+      }
+
+      this.cloudModels.set(this.uniqueModels(cloudModels));
+      this.localModels.set(this.uniqueModels(localModels));
+      this.availableModels.set(mergedModels);
+
+      if (!mergedModels.includes(this.selectedModel())) {
+        this.selectedModel.set(mergedModels[0]);
       }
     });
   }
@@ -241,6 +262,34 @@ export class ChatPanel implements AfterViewChecked, OnInit {
 
   onModelChange(newModel: string): void {
     this.selectedModel.set(newModel);
+  }
+
+  private normalizeModelList(entries: ModelEntry[] | null | undefined): string[] {
+    if (!entries || entries.length === 0) {
+      return [];
+    }
+
+    return this.uniqueModels(
+      entries
+        .map((entry) => {
+          if (typeof entry === 'string') {
+            return entry.trim();
+          }
+          const candidate = entry.name ?? entry.model ?? entry.id ?? '';
+          return candidate.trim();
+        })
+        .filter((name) => name.length > 0)
+    );
+  }
+
+  private uniqueModels(models: string[]): string[] {
+    return Array.from(new Set(models));
+  }
+
+  private isLikelyCloudModel(modelName: string): boolean {
+    const normalized = modelName.toLowerCase();
+    const cloudHints = ['gemini', 'gpt', 'claude', 'anthropic', 'openai', 'cohere', 'mistral-large'];
+    return cloudHints.some((hint) => normalized.includes(hint));
   }
 
   formatTime(date: Date): string {
