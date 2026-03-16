@@ -36,11 +36,24 @@ export interface ModelsResponse {
 })
 export class ApiService {
   private http = inject(HttpClient);
-  private backendHost = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
-  private apiBaseUrl = `http://${this.backendHost}:8000/api`;
+  private apiBaseUrl = this.resolveApiBaseUrl();
   private apiUrl = `${this.apiBaseUrl}/generate/`;
   private stopUrl = `${this.apiBaseUrl}/stop/`;
   private modelsUrl = `${this.apiBaseUrl}/models/`;
+
+  private resolveApiBaseUrl(): string {
+    if (typeof window === 'undefined') {
+      return 'http://127.0.0.1:8000/api';
+    }
+
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return 'http://127.0.0.1:8000/api';
+    }
+
+    // In production, use same-origin /api and let Vercel rewrite to backend.
+    return '/api';
+  }
 
   sendMessage(request: ChatRequest): Observable<ChatResponse> {
     return this.http.post<ChatResponse>(this.apiUrl, request).pipe(
