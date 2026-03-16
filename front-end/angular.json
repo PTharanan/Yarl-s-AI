@@ -6,7 +6,7 @@
   },
   "newProjectRoot": "projects",
   "projects": {
-    "split-screen-app": {
+    "yarls-ai": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:class": {
@@ -81,10 +81,10 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "split-screen-app:build:production"
+              "buildTarget": "yarls-ai:build:production"
             },
             "development": {
-              "buildTarget": "split-screen-app:build:development"
+              "buildTarget": "yarls-ai:build:development"
             }
           },
           "defaultConfiguration": "development"
