@@ -212,7 +212,42 @@ html, body {
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
+.voice-button {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 12px !important;
+  border: 1px solid #dbe5f3 !important;
+  background: #ffffff !important;
+  color: #475569 !important;
+  display: grid !important;
+  place-items: center !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.voice-button:hover {
+  border-color: rgba(37, 99, 235, 0.35) !important;
+  color: #1d4ed8 !important;
+  background: #eff6ff !important;
+}
+
+.voice-button--active {
+  border-color: rgba(37, 99, 235, 0.5) !important;
+  color: #1d4ed8 !important;
+  background: rgba(37, 99, 235, 0.08) !important;
+  animation: voice-listening-pulse 1.2s ease-in-out infinite;
+}
+
 .send-button-blue:hover {
   background-color: #1d4ed8 !important;
   transform: scale(1.05);
+}
+
+@keyframes voice-listening-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.28);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(37, 99, 235, 0);
+  }
 }

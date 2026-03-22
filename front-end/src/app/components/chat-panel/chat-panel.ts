@@ -40,6 +40,8 @@ export class ChatPanel implements AfterViewChecked, OnInit {
 
   private apiService = inject(ApiService);
   private currentRequest: Subscription | null = null;
+  private speechRecognition: any = null;
+  private pendingVoicePrompt = false;
 
   messages = signal<ChatMessage[]>([
     {
@@ -53,6 +55,8 @@ export class ChatPanel implements AfterViewChecked, OnInit {
   inputText = '';
   isTyping = signal(false);
   isGenerating = signal(false);
+  isListening = signal(false);
+  voiceSupported = signal(false);
   uploadedImagePreview = signal<string | null>(null);
   showSettingsModal = signal(false);
   
@@ -78,6 +82,8 @@ export class ChatPanel implements AfterViewChecked, OnInit {
   messageCount = computed(() => this.messages().length);
 
   ngOnInit(): void {
+    this.setupVoiceInput();
+
     this.apiService.getModels().subscribe((data: ModelsResponse) => {
       const allModels = this.normalizeModelList(data.models ?? []);
       let cloudModels = this.normalizeModelList(data.cloud_models ?? []);
@@ -116,6 +122,9 @@ export class ChatPanel implements AfterViewChecked, OnInit {
     const image = this.uploadedImagePreview();
     if (!text && !image) return;
 
+    const usedVoiceInput = this.pendingVoicePrompt;
+    const modelForRequest = this.resolveModelForRequest(text, usedVoiceInput);
+
     const userMsg: ChatMessage = {
       id: this.nextId++,
       role: 'user',
@@ -126,16 +135,21 @@ export class ChatPanel implements AfterViewChecked, OnInit {
 
     this.messages.update((msgs) => [...msgs, userMsg]);
     this.inputText = '';
+    this.pendingVoicePrompt = false;
     this.uploadedImagePreview.set(null);
     this.shouldScroll = true;
     this.isTyping.set(true);
     this.isGenerating.set(true);
 
+    if (this.isListening()) {
+      this.stopVoiceInput();
+    }
+
     const request: ChatRequest = {
       prompt: text,
       image: image ?? undefined,
       previousHtml: this.lastGeneratedHtml || undefined,
-      model: this.selectedModel()
+      model: modelForRequest
     };
 
     this.currentRequest = this.apiService.sendMessage(request).subscribe({
@@ -228,6 +242,31 @@ export class ChatPanel implements AfterViewChecked, OnInit {
     this.uploadedImagePreview.set(null);
   }
 
+  toggleVoiceInput(): void {
+    if (!this.voiceSupported() || this.isGenerating()) {
+      return;
+    }
+
+    if (this.isListening()) {
+      this.stopVoiceInput();
+      return;
+    }
+
+    try {
+      this.speechRecognition?.start();
+    } catch (err) {
+      console.warn('Voice recognition failed to start:', err);
+      this.isListening.set(false);
+    }
+  }
+
+  getVoiceButtonTitle(): string {
+    if (!this.voiceSupported()) {
+      return 'Voice input is not supported in this browser';
+    }
+    return this.isListening() ? 'Stop voice input' : 'Start voice input';
+  }
+
   startNewSession(): void {
     // Cancel any in-flight request
     if (this.currentRequest) {
@@ -246,11 +285,16 @@ export class ChatPanel implements AfterViewChecked, OnInit {
     ]);
     this.nextId = 2;
     this.inputText = '';
+    this.pendingVoicePrompt = false;
     this.uploadedImagePreview.set(null);
     this.isTyping.set(false);
     this.isGenerating.set(false);
     this.lastGeneratedHtml = '';
     this.shouldScroll = true;
+
+    if (this.isListening()) {
+      this.stopVoiceInput();
+    }
 
     // Clear the preview panel
     this.htmlCodeGenerated.emit('');
@@ -290,6 +334,113 @@ export class ChatPanel implements AfterViewChecked, OnInit {
     const normalized = modelName.toLowerCase();
     const cloudHints = ['gemini', 'gpt', 'claude', 'anthropic', 'openai', 'cohere', 'mistral-large'];
     return cloudHints.some((hint) => normalized.includes(hint));
+  }
+
+  private setupVoiceInput(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const speechRecognitionConstructor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!speechRecognitionConstructor) {
+      this.voiceSupported.set(false);
+      return;
+    }
+
+    const recognition = new speechRecognitionConstructor();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      this.isListening.set(true);
+    };
+
+    recognition.onend = () => {
+      this.isListening.set(false);
+    };
+
+    recognition.onerror = () => {
+      this.isListening.set(false);
+    };
+
+    recognition.onresult = (event: any) => {
+      let transcript = '';
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const result = event.results[i];
+        if (result?.isFinal) {
+          transcript += (result[0]?.transcript || '');
+        }
+      }
+
+      const finalText = transcript.trim();
+      if (!finalText) {
+        return;
+      }
+
+      const prefix = this.inputText.trim().length > 0 ? `${this.inputText.trim()} ` : '';
+      this.inputText = `${prefix}${finalText}`.trim();
+      this.pendingVoicePrompt = true;
+    };
+
+    this.speechRecognition = recognition;
+    this.voiceSupported.set(true);
+  }
+
+  private stopVoiceInput(): void {
+    try {
+      this.speechRecognition?.stop();
+    } catch {
+      // Ignore stop errors when recognition is already idle.
+    }
+    this.isListening.set(false);
+  }
+
+  private resolveModelForRequest(prompt: string, fromVoiceInput: boolean): string {
+    if (!fromVoiceInput || !this.isWebCreationTask(prompt)) {
+      return this.selectedModel();
+    }
+
+    const cloudModel = this.getPreferredCloudModel();
+    if (!cloudModel) {
+      return this.selectedModel();
+    }
+
+    if (this.selectedModel() !== cloudModel) {
+      this.selectedModel.set(cloudModel);
+    }
+
+    return cloudModel;
+  }
+
+  private getPreferredCloudModel(): string | null {
+    const clouds = this.cloudModels();
+    if (clouds.length === 0) {
+      return null;
+    }
+
+    const geminiModel = clouds.find((modelName) => modelName.toLowerCase().includes('gemini'));
+    return geminiModel ?? clouds[0] ?? null;
+  }
+
+  private isWebCreationTask(prompt: string): boolean {
+    const normalizedPrompt = (prompt || '').toLowerCase();
+    const webTaskHints = [
+      'create website',
+      'build website',
+      'make website',
+      'web app',
+      'landing page',
+      'portfolio',
+      'dashboard',
+      'html',
+      'css',
+      'ui',
+      'frontend',
+      'web design',
+    ];
+
+    return webTaskHints.some((hint) => normalizedPrompt.includes(hint));
   }
 
   formatTime(date: Date): string {
