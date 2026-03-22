@@ -582,6 +582,11 @@
     height: 40px !important;
   }
 
+  .voice-button {
+    width: 40px !important;
+    height: 40px !important;
+  }
+
   .accessibility-hints {
     margin-top: 8px !important;
     padding: 0 10px !important;
