@@ -44,10 +44,83 @@ def get_gemini_api_key():
 
 
 GEMINI_API_KEY = get_gemini_api_key()
-OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://127.0.0.1:11434').rstrip('/')
-OLLAMA_GENERATE_URL = f"{OLLAMA_BASE_URL}/api/generate"
-OLLAMA_CHAT_URL = f"{OLLAMA_BASE_URL}/api/chat"
-OLLAMA_TAGS_URL = f"{OLLAMA_BASE_URL}/api/tags"
+
+
+def is_running_in_docker():
+    return Path('/.dockerenv').exists()
+
+
+def get_ollama_base_urls():
+    refresh_runtime_env()
+    configured = (os.getenv('OLLAMA_BASE_URL') or '').strip().rstrip('/')
+    running_in_docker = is_running_in_docker()
+
+    if running_in_docker:
+        default_candidates = [
+            'http://host.docker.internal:11434',
+            'http://172.17.0.1:11434',
+            'http://127.0.0.1:11434',
+            'http://localhost:11434',
+        ]
+    else:
+        default_candidates = [
+            'http://127.0.0.1:11434',
+            'http://localhost:11434',
+            'http://host.docker.internal:11434',
+        ]
+
+    candidates = []
+    configured_first = True
+    if configured:
+        configured_lower = configured.lower()
+        if (not running_in_docker and 'host.docker.internal' in configured_lower) or (
+            running_in_docker and ('127.0.0.1' in configured_lower or 'localhost' in configured_lower)
+        ):
+            configured_first = False
+
+        if configured_first:
+            candidates.append(configured)
+
+    candidates.extend(default_candidates)
+
+    if configured and not configured_first:
+        candidates.append(configured)
+
+    unique_candidates = []
+    for candidate in candidates:
+        normalized = candidate.strip().rstrip('/')
+        if normalized and normalized not in unique_candidates:
+            unique_candidates.append(normalized)
+
+    return unique_candidates
+
+
+def ollama_request(method, endpoint, json_payload=None, timeout=(5, 120), require_success=False):
+    attempted_urls = []
+    last_error = None
+
+    for base_url in get_ollama_base_urls():
+        url = f"{base_url}{endpoint}"
+        attempted_urls.append(url)
+        try:
+            request_kwargs = {
+                'method': method,
+                'url': url,
+                'timeout': timeout,
+            }
+            if json_payload is not None:
+                request_kwargs['json'] = json_payload
+
+            response = requests.request(**request_kwargs)
+            if require_success:
+                response.raise_for_status()
+            return response
+        except requests.RequestException as exc:
+            last_error = exc
+
+    raise RuntimeError(
+        f"Could not connect to Ollama. Tried: {', '.join(attempted_urls)}. Last error: {last_error}"
+    )
 
 if GEMINI_API_KEY and genai is not None:
     genai.configure(api_key=GEMINI_API_KEY)
@@ -244,8 +317,12 @@ class GenerateView(APIView):
             try:
                 for m in [selected_model, 'moondream:latest']:
                     if 'gemini' not in m.lower():
-                        requests.post(OLLAMA_GENERATE_URL,
-                                     json={'model': m, 'keep_alive': 0}, timeout=2)
+                        ollama_request(
+                            'POST',
+                            '/api/generate',
+                            json_payload={'model': m, 'keep_alive': 0},
+                            timeout=(2, 2),
+                        )
                 return Response({'html': '', 'message': "AI Stopped and models unloaded. Goodbye!", 'is_web_output': False}, status=status.HTTP_200_OK)
             except:
                 return Response({'message': "Stop signal sent.", 'html': '', 'is_web_output': False}, status=status.HTTP_200_OK)
@@ -312,7 +389,13 @@ class GenerateView(APIView):
                     'messages': [{'role': 'user', 'content': "Describe this layout in detail for a developer.", 'images': [img_data]}],
                     'stream': False
                 }
-                v_res = requests.post(OLLAMA_CHAT_URL, json=vision_payload, timeout=600)
+                v_res = ollama_request(
+                    'POST',
+                    '/api/chat',
+                    json_payload=vision_payload,
+                    timeout=(5, 600),
+                    require_success=True,
+                )
                 image_description = v_res.json().get('message', {}).get('content', '')
             
             final_prompt = build_generation_prompt(
@@ -327,8 +410,13 @@ class GenerateView(APIView):
                 'system': SYSTEM_PROMPT,
                 'stream': False
             }
-            res = requests.post(OLLAMA_GENERATE_URL, json=payload, timeout=600)
-            res.raise_for_status()
+            res = ollama_request(
+                'POST',
+                '/api/generate',
+                json_payload=payload,
+                timeout=(5, 600),
+                require_success=True,
+            )
             generated_text = res.json().get('response', '')
             clean_html, is_code = extract_html(generated_text)
             
@@ -347,7 +435,12 @@ class StopGenerationView(APIView):
     def post(self, request):
         try:
             for m in ['deepseek-coder:6.7b', 'moondream:latest', 'qwen3-vl:8b']:
-                requests.post(OLLAMA_GENERATE_URL, json={'model': m, 'keep_alive': 0}, timeout=1)
+                ollama_request(
+                    'POST',
+                    '/api/generate',
+                    json_payload={'model': m, 'keep_alive': 0},
+                    timeout=(1, 2),
+                )
             return Response({'message': 'Stopped.'}, status=status.HTTP_200_OK)
         except:
             return Response({'message': 'Done.'}, status=status.HTTP_200_OK)
@@ -390,7 +483,7 @@ class ListModelsView(APIView):
         
         # --- 2. Local Models (Fetch from Ollama) ---
         try:
-            response = requests.get(OLLAMA_TAGS_URL, timeout=1)
+            response = ollama_request('GET', '/api/tags', timeout=(1, 2))
             if response.status_code == 200:
                 data = response.json()
                 ollama_models = [m['name'] for m in data.get('models', []) if 'moondream' not in m['name'].lower()]
