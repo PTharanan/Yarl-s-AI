@@ -9,6 +9,8 @@
 
 Yarl's Web AI is a premium, full-stack website builder and code-generation platform. It allows developers and designers to generate, edit, and preview fully functional responsive HTML/CSS/JS websites instantly from natural language instructions or wireframe mockups. It supports **hybrid LLM backends**, routing prompts to cloud models (Google Gemini) or local models (Ollama) seamlessly.
 
+🔗 **Live Demo:** [https://isaiaruvi.free.nf/](https://yarl-s-ai.vercel.app/)
+
 ---
 
 ## 🌟 Key Features
