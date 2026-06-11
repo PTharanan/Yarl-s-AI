@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of, Subscription } from 'rxjs';
 import { catchError } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 
 export interface ChatRequest {
   prompt: string;
@@ -36,24 +37,10 @@ export interface ModelsResponse {
 })
 export class ApiService {
   private http = inject(HttpClient);
-  private apiBaseUrl = this.resolveApiBaseUrl();
+  private apiBaseUrl = environment.apiBaseUrl;
   private apiUrl = `${this.apiBaseUrl}/generate/`;
   private stopUrl = `${this.apiBaseUrl}/stop/`;
   private modelsUrl = `${this.apiBaseUrl}/models/`;
-
-  private resolveApiBaseUrl(): string {
-    if (typeof window === 'undefined') {
-      return 'http://127.0.0.1:8000/api';
-    }
-
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') {
-      return 'http://127.0.0.1:8000/api';
-    }
-
-    // In production, use same-origin /api and let Vercel rewrite to backend.
-    return '/api';
-  }
 
   sendMessage(request: ChatRequest): Observable<ChatResponse> {
     return this.http.post<ChatResponse>(this.apiUrl, request).pipe(
