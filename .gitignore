@@ -62,6 +62,7 @@ list_gemini_models.py
 *.log
 cloudflared*.log
 *.png
+!screenshots/*.png
 qr-*.png
 
 # ==== OS files ====
