@@ -47,6 +47,24 @@
 
         <div class="settings-dropdown-shell">
           <button
+            (click)="openKeySettings()"
+            class="chat-header__action-btn key-trigger relative"
+            [class.key-trigger--active]="providerConfigured()"
+            aria-label="AI provider settings"
+            title="AI provider settings">
+            <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            @if (providerConfigured()) {
+              <span class="key-configured-dot" title="Provider configured"></span>
+            }
+          </button>
+        </div>
+
+        <div class="settings-dropdown-shell">
+          <button
             (click)="toggleSettings()"
             class="chat-header__action-btn settings-trigger"
             [class.settings-trigger--active]="showSettingsModal()"
@@ -69,14 +87,52 @@
             <div class="model-dropdown__header">
               <div class="model-dropdown__heading-wrap">
                 <p class="model-dropdown__title">Model Selector</p>
-                <p class="model-dropdown__subtitle">Choose the engine used for responses</p>
+                <p class="model-dropdown__subtitle">
+                  {{ providerActive() ? 'Models available with your ' + providerDisplayName() + ' key' : 'Choose the engine used for responses' }}
+                </p>
               </div>
               <span class="model-dropdown__active-chip" title="{{ selectedModel() }}">{{ selectedModel() }}</span>
             </div>
 
             @if (availableModels().length === 0) {
               <div class="model-dropdown__empty">No models available</div>
+            } @else if (providerActive()) {
+              <!-- Provider mode: single list of the user's own models -->
+              <div class="model-dropdown__section">
+                <p class="model-dropdown__section-title">
+                  <span class="model-dropdown__section-dot model-dropdown__section-dot--cloud"></span>
+                  {{ providerDisplayName() }} Models
+                </p>
+
+                <div class="model-dropdown__list">
+                  @for (modelName of cloudModels(); track modelName) {
+                    <button
+                      (click)="onModelChange(modelName); toggleSettings()"
+                      class="model-option model-option--cloud"
+                      [class.model-option--active]="selectedModel() === modelName"
+                      role="menuitemradio"
+                      [attr.aria-checked]="selectedModel() === modelName">
+                      <span class="model-option__icon model-option__icon--cloud">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582"></path>
+                        </svg>
+                      </span>
+                      <span class="model-option__name">{{ modelName }}</span>
+                      @if (selectedModel() === modelName) {
+                        <span class="model-option__check model-option__check--cloud">
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
+                          </svg>
+                        </span>
+                      }
+                    </button>
+                  } @empty {
+                    <p class="model-dropdown__empty-row">No models returned for this key</p>
+                  }
+                </div>
+              </div>
             } @else {
+              <!-- Default mode: server-side Cloud + Local split -->
               <div class="model-dropdown__section">
                 <p class="model-dropdown__section-title">
                   <span class="model-dropdown__section-dot model-dropdown__section-dot--cloud"></span>
@@ -336,4 +392,113 @@
       <div class="accessibility-hints__notice">AI may produce inaccurate info</div>
     </div>
   </div>
+
+  <!-- ===== AI Provider Settings Modal (bring your own key) ===== -->
+  @if (showKeySettings()) {
+    <div class="key-modal-overlay" (click)="closeKeySettings()">
+      <div class="key-modal animate-fade-in" role="dialog" aria-modal="true" aria-label="AI provider settings" (click)="$event.stopPropagation()">
+        <div class="key-modal__header">
+          <div class="key-modal__heading-wrap">
+            <p class="key-modal__title">AI Provider</p>
+            <p class="key-modal__subtitle">Connect your own API key from any provider. Keys are stored only in this browser.</p>
+          </div>
+          <button (click)="closeKeySettings()" class="key-modal__close" aria-label="Close">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="key-modal__body">
+          <!-- Provider Preset Chips -->
+          <div class="key-field">
+            <label class="key-field__label">Provider</label>
+            <div class="provider-chips">
+              @for (preset of providerPresets; track preset.provider) {
+                <button
+                  type="button"
+                  (click)="onProviderPresetChange(preset.provider)"
+                  class="provider-chip"
+                  [class.provider-chip--active]="providerInput === preset.provider">
+                  {{ preset.label }}
+                </button>
+              }
+            </div>
+          </div>
+
+          <!-- Model Name -->
+          <div class="key-field">
+            <label class="key-field__label" for="providerModel">Model</label>
+            <input
+              id="providerModel"
+              type="text"
+              [(ngModel)]="providerModelInput"
+              [placeholder]="presetFor(providerInput).defaultModel || 'e.g. gpt-4o-mini'"
+              autocomplete="off"
+              spellcheck="false"
+              class="key-field__input" />
+          </div>
+
+          <!-- API Key -->
+          <div class="key-field">
+            <label class="key-field__label" for="providerKey">API Key</label>
+            <div class="key-field__input-row">
+              <input
+                id="providerKey"
+                [type]="showProviderKey() ? 'text' : 'password'"
+                [(ngModel)]="providerKeyInput"
+                [placeholder]="presetFor(providerInput).keyPlaceholder"
+                autocomplete="off"
+                spellcheck="false"
+                class="key-field__input" />
+              <button type="button" (click)="toggleProviderKeyVisibility()" class="key-field__toggle" [attr.aria-label]="showProviderKey() ? 'Hide key' : 'Show key'">
+                @if (showProviderKey()) {
+                  <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                  </svg>
+                } @else {
+                  <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                }
+              </button>
+            </div>
+            @if (presetFor(providerInput).keyHelpUrl) {
+              <p class="key-field__hint">
+                Get a key at
+                <a href="{{ presetFor(providerInput).keyHelpUrl }}" target="_blank" rel="noopener noreferrer" class="key-field__link">{{ presetFor(providerInput).label }}</a>.
+              </p>
+            }
+          </div>
+
+          <!-- Base URL (advanced — hidden for Gemini which has no custom base URL) -->
+          @if (providerInput !== 'gemini') {
+            <div class="key-field">
+              <label class="key-field__label" for="providerBaseUrl">Base URL
+                <span class="key-field__label-muted">(optional)</span>
+              </label>
+              <input
+                id="providerBaseUrl"
+                type="text"
+                [(ngModel)]="providerBaseUrlInput"
+                [placeholder]="presetFor(providerInput).defaultBaseUrl || 'https://api.example.com/v1'"
+                autocomplete="off"
+                spellcheck="false"
+                class="key-field__input" />
+              <p class="key-field__hint">Override the default endpoint URL. Leave blank to use the provider's default.</p>
+            </div>
+          }
+        </div>
+
+        <div class="key-modal__footer">
+          <button (click)="clearKeySettings()" type="button" class="key-modal__btn key-modal__btn--ghost">Clear All</button>
+          <div class="key-modal__footer-right">
+            <button (click)="closeKeySettings()" type="button" class="key-modal__btn key-modal__btn--muted">Cancel</button>
+            <button (click)="saveKeySettings()" type="button" class="key-modal__btn key-modal__btn--primary">Save &amp; Connect</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
 </div>
