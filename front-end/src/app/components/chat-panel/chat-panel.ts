@@ -12,7 +12,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
-import { ApiService, ChatRequest, ChatResponse, ModelEntry, ModelsResponse } from '../../services/api.service';
+import { ApiService, ChatRequest, ChatResponse, ModelEntry, ModelsResponse, ProviderConfig, ProviderType } from '../../services/api.service';
 import { Subscription } from 'rxjs';
 
 export interface ChatMessage {
@@ -25,6 +25,140 @@ export interface ChatMessage {
 }
 
 const SYSTEM_IDENTITY = "I am Yarl's Web AI";
+
+// localStorage keys for the "bring your own key" provider settings.
+const LS_PROVIDER_CONFIG = 'yarl_provider_config';
+const LS_PROVIDER_ENABLED = 'yarl_provider_enabled';
+
+interface ProviderPreset {
+  provider: ProviderType;
+  label: string;
+  shortLabel: string;  // Used in the navbar pill for brevity.
+  defaultModel: string;
+  defaultBaseUrl: string;
+  keyPlaceholder: string;
+  keyHelpUrl: string;
+}
+
+// Presets auto-fill the model + base URL defaults in the modal.
+const PROVIDER_PRESETS: ProviderPreset[] = [
+  {
+    provider: 'openai',
+    label: 'OpenAI',
+    shortLabel: 'OpenAI',
+    defaultModel: 'gpt-4o-mini',
+    defaultBaseUrl: 'https://api.openai.com/v1',
+    keyPlaceholder: 'sk-...',
+    keyHelpUrl: 'https://platform.openai.com/api-keys',
+  },
+  {
+    provider: 'deepseek',
+    label: 'DeepSeek',
+    shortLabel: 'DeepSeek',
+    defaultModel: 'deepseek-chat',
+    defaultBaseUrl: 'https://api.deepseek.com/v1',
+    keyPlaceholder: 'sk-...',
+    keyHelpUrl: 'https://platform.deepseek.com/api_keys',
+  },
+  {
+    provider: 'zai',
+    label: 'z.ai (GLM)',
+    shortLabel: 'z.ai',
+    defaultModel: 'glm-4.6',
+    defaultBaseUrl: 'https://api.z.ai/api/paas/v4',
+    keyPlaceholder: 'your z.ai key',
+    keyHelpUrl: 'https://z.ai/manage-apikey/apikey-list',
+  },
+  {
+    provider: 'anthropic',
+    label: 'Anthropic (Claude)',
+    shortLabel: 'Claude',
+    defaultModel: 'claude-3-5-sonnet-latest',
+    defaultBaseUrl: 'https://api.anthropic.com',
+    keyPlaceholder: 'sk-ant-...',
+    keyHelpUrl: 'https://console.anthropic.com/settings/keys',
+  },
+  {
+    provider: 'gemini',
+    label: 'Google Gemini',
+    shortLabel: 'Gemini',
+    defaultModel: 'gemini-1.5-flash',
+    defaultBaseUrl: '',
+    keyPlaceholder: 'AIza...',
+    keyHelpUrl: 'https://aistudio.google.com/app/apikey',
+  },
+  {
+    provider: 'ollama',
+    label: 'Ollama (local)',
+    shortLabel: 'Ollama',
+    defaultModel: 'deepseek-coder:6.7b',
+    defaultBaseUrl: 'http://127.0.0.1:11434/v1',
+    keyPlaceholder: 'ollama (any value)',
+    keyHelpUrl: 'https://ollama.com',
+  },
+  {
+    provider: 'custom',
+    label: 'Custom (OpenAI-compatible)',
+    shortLabel: 'Custom',
+    defaultModel: '',
+    defaultBaseUrl: '',
+    keyPlaceholder: 'API key',
+    keyHelpUrl: '',
+  },
+];
+
+function findPreset(provider: ProviderType): ProviderPreset {
+  return PROVIDER_PRESETS.find((p) => p.provider === provider) ?? PROVIDER_PRESETS[0];
+}
+
+interface StoredProviderConfig {
+  provider: ProviderType;
+  base_url: string;
+  model: string;
+  api_key: string;
+}
+
+function readStoredConfig(): StoredProviderConfig {
+  const fallback: StoredProviderConfig = {
+    provider: 'openai',
+    base_url: '',
+    model: '',
+    api_key: '',
+  };
+  try {
+    const raw = localStorage.getItem(LS_PROVIDER_CONFIG);
+    if (!raw) {
+      return fallback;
+    }
+    return { ...fallback, ...JSON.parse(raw) };
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStoredConfig(config: StoredProviderConfig): void {
+  try {
+    localStorage.setItem(LS_PROVIDER_CONFIG, JSON.stringify(config));
+  } catch {
+    // localStorage may be unavailable (private mode) — settings just won't persist.
+  }
+}
+
+function readStoredFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writeStoredFlag(key: string, value: boolean): void {
+  try {
+    localStorage.setItem(key, value ? 'true' : 'false');
+  } catch {
+    // Ignore write failures.
+  }
+}
 
 @Component({
   selector: 'app-chat-panel',
@@ -59,6 +193,31 @@ export class ChatPanel implements AfterViewChecked, OnInit {
   voiceSupported = signal(false);
   uploadedImagePreview = signal<string | null>(null);
   showSettingsModal = signal(false);
+
+  // ===== AI provider settings (bring your own key) =====
+  showKeySettings = signal(false);
+  showProviderKey = signal(false);
+  // Editing buffers for the modal — populated when the modal opens.
+  providerInput: ProviderType = 'openai';
+  providerModelInput = '';
+  providerKeyInput = '';
+  providerBaseUrlInput = '';
+  // Persisted values actually used when building requests.
+  private initialConfig = readStoredConfig();
+  provider = signal<ProviderType>(this.initialConfig.provider);
+  providerModel = signal<string>(this.initialConfig.model);
+  providerKey = signal<string>(this.initialConfig.api_key);
+  providerBaseUrl = signal<string>(this.initialConfig.base_url);
+  providerEnabled = signal<boolean>(readStoredFlag(LS_PROVIDER_ENABLED));
+  // True when a complete provider config exists (model + key). Used to gate the
+  // "override the model picker" behavior and the header pill.
+  providerConfigured = computed(() => {
+    return Boolean(this.providerModel().trim() && this.providerKey().trim());
+  });
+  providerActive = computed(() => this.providerEnabled() && this.providerConfigured());
+  providerDisplayName = computed(() => findPreset(this.provider()).shortLabel);
+
+  readonly providerPresets = PROVIDER_PRESETS;
   
   availableModels = signal<string[]>([]);
   selectedModel = signal('deepseek-coder:6.7b');
@@ -83,8 +242,37 @@ export class ChatPanel implements AfterViewChecked, OnInit {
 
   ngOnInit(): void {
     this.setupVoiceInput();
+    this.loadModels();
+  }
 
-    this.apiService.getModels().subscribe((data: ModelsResponse) => {
+  /**
+   * Load the model list. When a provider config is active, fetch models for the
+   * user's own key; otherwise fall back to the server-side Gemini/Ollama list.
+   */
+  private loadModels(): void {
+    const providerConfig = this.resolveProviderForRequest();
+
+    const source = providerConfig
+      ? this.apiService.getProviderModels(providerConfig)
+      : this.apiService.getModels();
+
+    source.subscribe((data: ModelsResponse) => {
+      // Surface provider fetch failures (e.g. bad key) as a chat message.
+      if (data.error) {
+        this.messages.update((msgs) => [
+          ...msgs,
+          {
+            id: this.nextId++,
+            role: 'assistant',
+            content: `⚠️ ${data.error}`,
+            timestamp: new Date(),
+          },
+        ]);
+        this.shouldScroll = true;
+        // Keep any previously loaded models; don't wipe the picker on error.
+        return;
+      }
+
       const allModels = this.normalizeModelList(data.models ?? []);
       let cloudModels = this.normalizeModelList(data.cloud_models ?? []);
       let localModels = this.normalizeModelList(data.local_models ?? []);
@@ -97,6 +285,10 @@ export class ChatPanel implements AfterViewChecked, OnInit {
 
       const mergedModels = this.uniqueModels([...cloudModels, ...localModels, ...allModels]);
       if (mergedModels.length === 0) {
+        // Reset picker lists so stale server models don't linger after switching.
+        this.cloudModels.set([]);
+        this.localModels.set([]);
+        this.availableModels.set([]);
         return;
       }
 
@@ -145,11 +337,14 @@ export class ChatPanel implements AfterViewChecked, OnInit {
       this.stopVoiceInput();
     }
 
+    // When a provider config is active, it overrides the 3-dots model picker.
+    const providerConfig = this.resolveProviderForRequest();
     const request: ChatRequest = {
       prompt: text,
       image: image ?? undefined,
       previousHtml: this.lastGeneratedHtml || undefined,
-      model: modelForRequest
+      model: providerConfig ? this.providerModel().trim() : modelForRequest,
+      provider_config: providerConfig ?? undefined
     };
 
     this.currentRequest = this.apiService.sendMessage(request).subscribe({
@@ -304,6 +499,93 @@ export class ChatPanel implements AfterViewChecked, OnInit {
     this.showSettingsModal.update(v => !v);
   }
 
+  // ===== AI provider settings modal handlers =====
+  openKeySettings(): void {
+    // Seed the modal inputs with the currently persisted values.
+    this.providerInput = this.provider();
+    this.providerModelInput = this.providerModel();
+    this.providerKeyInput = this.providerKey();
+    this.providerBaseUrlInput = this.providerBaseUrl();
+    this.showProviderKey.set(false);
+    this.showKeySettings.set(true);
+  }
+
+  closeKeySettings(): void {
+    this.showKeySettings.set(false);
+  }
+
+  /**
+   * Switching providers in the modal resets ALL fields to that provider's
+   * fresh defaults — model, key, and base URL are cleared and re-seeded.
+   */
+  onProviderPresetChange(provider: ProviderType): void {
+    this.providerInput = provider;
+    const preset = findPreset(provider);
+
+    // Clear everything, then apply this provider's defaults.
+    this.providerKeyInput = '';
+    this.providerModelInput = preset.defaultModel;
+    this.providerBaseUrlInput = preset.provider === 'gemini' ? '' : preset.defaultBaseUrl;
+  }
+
+  presetFor(provider: ProviderType): ProviderPreset {
+    return findPreset(provider);
+  }
+
+  saveKeySettings(): void {
+    const provider = this.providerInput;
+    this.provider.set(provider);
+    this.providerModel.set(this.providerModelInput.trim());
+    this.providerKey.set(this.providerKeyInput.trim());
+    this.providerBaseUrl.set(this.providerBaseUrlInput.trim());
+
+    writeStoredConfig({
+      provider,
+      base_url: this.providerBaseUrl(),
+      model: this.providerModel(),
+      api_key: this.providerKey(),
+    });
+    // Auto-enable the override once a complete config is saved.
+    if (this.providerConfigured()) {
+      this.providerEnabled.set(true);
+      writeStoredFlag(LS_PROVIDER_ENABLED, true);
+    }
+
+    this.showKeySettings.set(false);
+    // Refresh the Model Selector to show this provider's models.
+    this.loadModels();
+  }
+
+  /** Disconnect: stop overriding the 3-dots picker, keep the saved config. */
+  disconnectProvider(): void {
+    this.providerEnabled.set(false);
+    writeStoredFlag(LS_PROVIDER_ENABLED, false);
+    // Restore the server-side model list.
+    this.loadModels();
+  }
+
+  clearKeySettings(): void {
+    this.providerInput = 'openai';
+    this.providerModelInput = '';
+    this.providerKeyInput = '';
+    this.providerBaseUrlInput = '';
+
+    this.provider.set('openai');
+    this.providerModel.set('');
+    this.providerKey.set('');
+    this.providerBaseUrl.set('');
+    this.providerEnabled.set(false);
+
+    writeStoredConfig({ provider: 'openai', base_url: '', model: '', api_key: '' });
+    writeStoredFlag(LS_PROVIDER_ENABLED, false);
+    // Restore the server-side model list.
+    this.loadModels();
+  }
+
+  toggleProviderKeyVisibility(): void {
+    this.showProviderKey.update(v => !v);
+  }
+
   onModelChange(newModel: string): void {
     this.selectedModel.set(newModel);
   }
@@ -397,6 +679,8 @@ export class ChatPanel implements AfterViewChecked, OnInit {
   }
 
   private resolveModelForRequest(prompt: string, fromVoiceInput: boolean): string {
+    // Provider config override is handled in sendMessage() — this method only
+    // deals with the server-side 3-dots picker (when no provider override).
     if (!fromVoiceInput || !this.isWebCreationTask(prompt)) {
       return this.selectedModel();
     }
@@ -411,6 +695,29 @@ export class ChatPanel implements AfterViewChecked, OnInit {
     }
 
     return cloudModel;
+  }
+
+  /**
+   * Builds the provider_config object to send with the request, or null when
+   * the user's custom provider is not active (server defaults via 3-dots picker).
+   */
+  private resolveProviderForRequest(): ProviderConfig | null {
+    if (!this.providerActive()) {
+      return null;
+    }
+
+    const cfg: ProviderConfig = {
+      provider: this.provider(),
+      model: this.providerModel().trim(),
+      api_key: this.providerKey().trim(),
+    };
+
+    const baseUrl = this.providerBaseUrl().trim();
+    if (baseUrl) {
+      cfg.base_url = baseUrl;
+    }
+
+    return cfg;
   }
 
   private getPreferredCloudModel(): string | null {
