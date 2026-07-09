@@ -9,6 +9,26 @@ export interface ChatRequest {
   image?: string;
   previousHtml?: string;
   model?: string;
+  // When present, the backend routes to this provider using the supplied key,
+  // overriding the server-side default model (the 3-dots picker).
+  provider_config?: ProviderConfig;
+}
+
+export type ProviderType =
+  | 'openai'
+  | 'deepseek'
+  | 'zai'
+  | 'anthropic'
+  | 'gemini'
+  | 'ollama'
+  | 'custom';
+
+export interface ProviderConfig {
+  provider: ProviderType;
+  /** Optional base URL override. If omitted, the backend uses the provider default. */
+  base_url?: string;
+  model: string;
+  api_key: string;
 }
 
 export interface ChatResponse {
@@ -30,6 +50,8 @@ export interface ModelsResponse {
   models?: ModelEntry[];
   cloud_models?: ModelEntry[];
   local_models?: ModelEntry[];
+  /** Present when fetching provider models failed (e.g. bad key). */
+  error?: string;
 }
 
 @Injectable({
@@ -71,6 +93,20 @@ export class ApiService {
       catchError(error => {
         console.error('Failed to fetch models:', error);
         return of({ models: ['deepseek-coder:6.7b'], cloud_models: [], local_models: ['deepseek-coder:6.7b'] }); // Fallback
+      })
+    );
+  }
+
+  /**
+   * Fetch models for a client-supplied provider config (bring your own key).
+   * Hits POST /models/ which the backend uses to list models for the given key.
+   */
+  getProviderModels(config: ProviderConfig): Observable<ModelsResponse> {
+    return this.http.post<ModelsResponse>(this.modelsUrl, { provider_config: config }).pipe(
+      catchError(error => {
+        console.error('Failed to fetch provider models:', error);
+        const msg = error?.error?.error || 'Could not list models for this key.';
+        return of({ models: [], cloud_models: [], local_models: [], error: msg });
       })
     );
   }

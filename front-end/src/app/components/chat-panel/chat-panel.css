@@ -536,6 +536,14 @@
     font-size: 8px;
   }
 
+  .provider-active-pill {
+    padding: 4px 8px;
+  }
+
+  .provider-active-pill__text {
+    font-size: 8px;
+  }
+
   .chat-container-surface {
     padding: 12px 10px 14px !important;
   }
@@ -641,6 +649,10 @@
 @media (max-width: 430px) {
   .chat-mode-pill {
     display: none;
+  }
+
+  .provider-active-pill__text {
+    font-size: 7.5px;
   }
 
   .accessibility-hints {
