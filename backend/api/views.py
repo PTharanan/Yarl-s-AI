@@ -286,15 +286,94 @@ def extract_html(text):
         return tag_match.group(1).strip(), True
     return text.strip(), False
 
+
+# --- Provider default base URLs ---
+PROVIDER_DEFAULTS = {
+    'openai':    'https://api.openai.com/v1',
+    'deepseek':  'https://api.deepseek.com/v1',
+    'zai':       'https://api.z.ai/api/paas/v4',
+    'anthropic': 'https://api.anthropic.com',
+    'ollama':    'http://127.0.0.1:11434/v1',
+    'custom':    '',
+    # 'gemini' has no base_url — uses google-generativeai SDK.
+}
+
+OPENAI_COMPATIBLE_PROVIDERS = {'openai', 'deepseek', 'zai', 'ollama', 'custom'}
+
+
+def call_openai_compatible(base_url, api_key, model, system_prompt, user_content, image_b64=None, timeout=(5, 300)):
+    """Call any OpenAI-compatible /chat/completions endpoint and return the assistant text."""
+    url = f"{base_url.rstrip('/')}/chat/completions"
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Content-Type': 'application/json',
+    }
+    messages = []
+    messages.append({'role': 'system', 'content': system_prompt})
+
+    user_parts = [{'type': 'text', 'text': user_content}]
+    if image_b64:
+        user_parts.append({
+            'type': 'image_url',
+            'image_url': {'url': f'data:image/png;base64,{image_b64}'},
+        })
+    messages.append({'role': 'user', 'content': user_parts})
+
+    payload = {
+        'model': model,
+        'messages': messages,
+        'stream': False,
+    }
+
+    res = requests.post(url, json=payload, headers=headers, timeout=timeout)
+    res.raise_for_status()
+    data = res.json()
+
+    # Standard OpenAI response shape.
+    return data['choices'][0]['message']['content']
+
+
+def call_anthropic(base_url, api_key, model, system_prompt, user_content, image_b64=None, timeout=(5, 300)):
+    """Call the Anthropic /v1/messages endpoint and return the assistant text."""
+    url = f"{base_url.rstrip('/')}/v1/messages"
+    headers = {
+        'x-api-key': api_key,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+    }
+
+    user_parts = [{'type': 'text', 'text': user_content}]
+    if image_b64:
+        user_parts.append({
+            'type': 'image',
+            'source': {'type': 'base64', 'media_type': 'image/png', 'data': image_b64},
+        })
+
+    payload = {
+        'model': model,
+        'max_tokens': 8192,
+        'system': system_prompt,
+        'messages': [{'role': 'user', 'content': user_parts}],
+    }
+
+    res = requests.post(url, json=payload, headers=headers, timeout=timeout)
+    res.raise_for_status()
+    data = res.json()
+
+    return data['content'][0]['text']
+
 class GenerateView(APIView):
     def post(self, request):
-        gemini_api_key = get_gemini_api_key()
         raw_prompt = request.data.get('prompt', '')
         image = request.data.get('image', None)
         previous_html = request.data.get('previousHtml', '')
         selected_model = request.data.get('model', 'deepseek-coder:6.7b')
+        provider_cfg = request.data.get('provider_config')  # Optional client provider config
 
-        print(f"📡 Request received. Model: {selected_model}")
+        # Determine routing: provider_config (client) > server-side defaults.
+        using_provider_config = isinstance(provider_cfg, dict) and provider_cfg.get('api_key')
+
+        print(f"📡 Request received. Model: {selected_model} | Provider config: {'yes' if using_provider_config else 'no'}")
 
         if not raw_prompt and not image:
             return Response({'error': 'Please provide prompt or image'}, status=status.HTTP_400_BAD_REQUEST)
@@ -312,7 +391,7 @@ class GenerateView(APIView):
 
         prompt_lower = raw_prompt.lower().strip()
         stop_words = ['stop', 'bye', 'exit', 'quit', 'terminate', 'close']
-        
+
         if any(word == prompt_lower for word in stop_words) or (len(prompt_lower) < 10 and any(word in prompt_lower for word in ['bye', 'stop'])):
             try:
                 for m in [selected_model, 'moondream:latest']:
@@ -328,43 +407,133 @@ class GenerateView(APIView):
                 return Response({'message': "Stop signal sent.", 'html': '', 'is_web_output': False}, status=status.HTTP_200_OK)
 
         contextual_prompt = build_generation_prompt(raw_prompt, previous_html=previous_html)
+        image_b64 = (image.split(',')[1] if ',' in image else image) if image else None
 
-        # --- GEMINI ROUTING ---
+        # ===================================================================
+        # 1. CLIENT PROVIDER CONFIG (OpenAI-compatible / Anthropic / Gemini)
+        # ===================================================================
+        if using_provider_config:
+            provider = (provider_cfg.get('provider') or '').strip().lower()
+            api_key = (provider_cfg.get('api_key') or '').strip()
+            model_name = (provider_cfg.get('model') or selected_model).strip()
+            base_url = (provider_cfg.get('base_url') or '').strip() or PROVIDER_DEFAULTS.get(provider, '')
+
+            # --- Anthropic (Claude) ---
+            if provider == 'anthropic':
+                if not base_url:
+                    base_url = PROVIDER_DEFAULTS['anthropic']
+                try:
+                    print(f"🟣 Routing to Anthropic: {model_name}")
+                    generated_text = call_anthropic(
+                        base_url, api_key, model_name,
+                        SYSTEM_PROMPT, contextual_prompt, image_b64=image_b64,
+                    )
+                    clean_html, is_code = extract_html(generated_text)
+                    return Response({
+                        'html': clean_html if is_code else '',
+                        'message': f"Generated via Anthropic ({model_name})" if is_code else generated_text,
+                        'is_web_output': is_code,
+                        'model_used': model_name,
+                    }, status=status.HTTP_200_OK)
+                except Exception as e:
+                    err_str = str(e)
+                    print(f"❌ Anthropic API Error: {err_str}")
+                    return Response({'error': f"Anthropic Error: {err_str}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            # --- Gemini (via google-generativeai SDK) ---
+            if provider == 'gemini':
+                if genai is None:
+                    return Response({'error': 'Gemini support is unavailable because google-generativeai is not installed.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                if not api_key:
+                    return Response({'error': 'Gemini API Key missing.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                genai.configure(api_key=api_key)
+                try:
+                    if model_name in ['gemini-1.5-flash', 'gemini-1.5-pro']:
+                        model_name = f"{model_name}-latest"
+                    print(f"💎 Routing to Gemini (client key): {model_name}")
+                    model = genai.GenerativeModel(model_name=model_name, system_instruction=SYSTEM_PROMPT)
+                    content = [contextual_prompt or "Create a professional website based on this image."]
+                    if image_b64:
+                        content.append({'mime_type': 'image/png', 'data': image_b64})
+                    response = model.generate_content(content)
+                    if not response or not response.text:
+                        return Response({'error': 'Gemini returned an empty response.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    generated_text = response.text
+                    clean_html, is_code = extract_html(generated_text)
+                    return Response({
+                        'html': clean_html if is_code else '',
+                        'message': f"Generated via Gemini ({model_name})" if is_code else generated_text,
+                        'is_web_output': is_code,
+                        'model_used': model_name,
+                    }, status=status.HTTP_200_OK)
+                except Exception as e:
+                    err_str = str(e)
+                    print(f"❌ Gemini API Error: {err_str}")
+                    return Response({'error': f"Gemini Error: {err_str}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            # --- OpenAI-compatible (openai, deepseek, zai, ollama, custom) ---
+            if not base_url:
+                base_url = PROVIDER_DEFAULTS.get(provider, '')
+            if not base_url:
+                return Response({'error': f"No base URL known for provider '{provider}'. Set one in the settings."}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                provider_label = provider.upper() if provider != 'zai' else 'z.ai'
+                print(f"⚡ Routing to {provider_label} (OpenAI-compatible): {model_name} @ {base_url}")
+                generated_text = call_openai_compatible(
+                    base_url, api_key, model_name,
+                    SYSTEM_PROMPT, contextual_prompt, image_b64=image_b64,
+                )
+                clean_html, is_code = extract_html(generated_text)
+                return Response({
+                    'html': clean_html if is_code else '',
+                    'message': f"Generated via {provider_label} ({model_name})" if is_code else generated_text,
+                    'is_web_output': is_code,
+                    'model_used': model_name,
+                }, status=status.HTTP_200_OK)
+            except Exception as e:
+                err_str = str(e)
+                print(f"❌ {provider.upper()} API Error: {err_str}")
+                return Response({'error': f"Provider Error: {err_str}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # ===================================================================
+        # 2. SERVER-SIDE DEFAULTS (no provider_config from client)
+        # ===================================================================
+        gemini_api_key = get_gemini_api_key()
+
+        # --- GEMINI ROUTING (server-side key) ---
         if 'gemini' in selected_model.lower():
             if genai is None:
                 return Response({'error': 'Gemini support is unavailable because google-generativeai is not installed in the backend environment.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             if not gemini_api_key:
                 return Response({'error': 'Gemini API Key missing in backend .env'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             genai.configure(api_key=gemini_api_key)
-            
+
             try:
-                # Use standard model names with -latest for better stability
-                # The library handles 'models/' prefix automatically.
                 model_name = selected_model.split(' ')[0]
                 if model_name in ['gemini-1.5-flash', 'gemini-1.5-pro']:
                     model_name = f"{model_name}-latest"
-                
-                print(f"💎 Routing to Gemini: {model_name}")
-                
+
+                print(f"💎 Routing to Gemini (server key): {model_name}")
+
                 model = genai.GenerativeModel(
                     model_name=model_name,
                     system_instruction=SYSTEM_PROMPT
                 )
-                
+
                 content = []
                 content.append(contextual_prompt or "Create a professional website based on this image.")
                 if image:
                     img_data = image.split(',')[1] if ',' in image else image
                     content.append({'mime_type': 'image/png', 'data': img_data})
-                
+
                 response = model.generate_content(content)
-                
+
                 if not response or not response.text:
                    return Response({'error': 'Gemini returned an empty response. This might be a safety filter or API issue.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
                 generated_text = response.text
                 clean_html, is_code = extract_html(generated_text)
-                
+
                 return Response({
                     'html': clean_html if is_code else '',
                     'message': f"Generated via Gemini ({model_name})" if is_code else generated_text,
@@ -397,13 +566,13 @@ class GenerateView(APIView):
                     require_success=True,
                 )
                 image_description = v_res.json().get('message', {}).get('content', '')
-            
+
             final_prompt = build_generation_prompt(
                 raw_prompt,
                 previous_html=previous_html,
                 image_description=image_description if image else '',
             )
-            
+
             payload = {
                 'model': selected_model,
                 'prompt': final_prompt,
@@ -419,14 +588,14 @@ class GenerateView(APIView):
             )
             generated_text = res.json().get('response', '')
             clean_html, is_code = extract_html(generated_text)
-            
+
             return Response({
                 'html': clean_html if is_code else '',
                 'message': f"Generated via {selected_model} (Local)" if is_code else generated_text,
                 'is_web_output': is_code,
                 'model_used': selected_model
             }, status=status.HTTP_200_OK)
-                
+
         except Exception as e:
             return Response({'error': f"Local API Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -447,13 +616,13 @@ class StopGenerationView(APIView):
 
 class ListModelsView(APIView):
     def get(self, request):
-        """Returns a list of both Cloud (Gemini) and Local models."""
+        """Returns server-side Gemini + Ollama models (no client key in play)."""
         gemini_api_key = get_gemini_api_key()
 
         cloud_models = []
         local_models = []
         models = []
-        
+
         # --- 1. Dynamic Cloud Models (Fetch from Gemini API) ---
         if gemini_api_key and genai is not None:
             try:
@@ -465,12 +634,12 @@ class ListModelsView(APIView):
                         # Only include if it matches the requested list
                         if any(req in name.lower() for req in requested_gems):
                             cloud_models.append(name)
-                
-                # If the search didn't find them but the user explicitly wants them, 
+
+                # If the search didn't find them but the user explicitly wants them,
                 # ensure we show at least their requested versions if the API allows.
                 if not any('gemini' in m for m in cloud_models):
                     cloud_models.extend([g for g in requested_gems if 'image' not in g])
-                
+
                 # If the search didn't find them, add them manually as a safety fallback
                 if not any('gemini' in m for m in cloud_models):
                     cloud_models.extend(['gemini-1.5-flash', 'gemini-1.5-pro'])
@@ -480,7 +649,7 @@ class ListModelsView(APIView):
         elif gemini_api_key and genai is None:
             print("⚠️ Gemini API key exists but google-generativeai is not installed.")
             cloud_models.extend(['gemini-1.5-flash', 'gemini-1.5-pro'])
-        
+
         # --- 2. Local Models (Fetch from Ollama) ---
         try:
             response = ollama_request('GET', '/api/tags', timeout=(1, 2))
@@ -491,7 +660,7 @@ class ListModelsView(APIView):
         except:
             # Fallback if Ollama is not local but we want to show the option
             local_models.extend(['deepseek-coder:6.7b', 'qwen3-vl:8b'])
-            
+
         cloud_models = list(dict.fromkeys(cloud_models))
         local_models = list(dict.fromkeys(local_models))
         models = list(dict.fromkeys(cloud_models + local_models))
@@ -501,6 +670,78 @@ class ListModelsView(APIView):
                 'models': models,
                 'cloud_models': cloud_models,
                 'local_models': local_models,
+            },
+            status=status.HTTP_200_OK
+        )
+
+    def post(self, request):
+        """Returns models for a client-supplied provider config (bring your own key)."""
+        provider_cfg = request.data.get('provider_config')
+        if not isinstance(provider_cfg, dict) or not provider_cfg.get('api_key'):
+            return Response(
+                {'error': 'provider_config with api_key is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        provider = (provider_cfg.get('provider') or '').strip().lower()
+        api_key = (provider_cfg.get('api_key') or '').strip()
+        base_url = (provider_cfg.get('base_url') or '').strip() or PROVIDER_DEFAULTS.get(provider, '')
+
+        cloud_models = []
+
+        # --- Gemini (via google-generativeai SDK) ---
+        if provider == 'gemini':
+            if genai is None:
+                return Response({'error': 'Gemini support unavailable (google-generativeai not installed).'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            try:
+                genai.configure(api_key=api_key)
+                for m in genai.list_models():
+                    if 'generateContent' in m.supported_generation_methods:
+                        cloud_models.append(m.name.replace('models/', ''))
+            except Exception as e:
+                print(f"⚠️ Could not fetch Gemini models (client key): {e}")
+                return Response({'error': f'Gemini error: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # --- Anthropic: hard-coded known models (no public list endpoint) ---
+        elif provider == 'anthropic':
+            cloud_models = [
+                'claude-3-5-sonnet-latest',
+                'claude-3-5-haiku-latest',
+                'claude-3-opus-latest',
+                'claude-3-sonnet-20240229',
+                'claude-3-haiku-20240307',
+            ]
+
+        # --- OpenAI-compatible providers: GET {base_url}/models ---
+        else:
+            if not base_url:
+                return Response({'error': f"No base URL known for provider '{provider}'. Set one in the settings.'"}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                url = f"{base_url.rstrip('/')}/models"
+                headers = {'Authorization': f'Bearer {api_key}'}
+                res = requests.get(url, headers=headers, timeout=(5, 20))
+                res.raise_for_status()
+                data = res.json()
+                # OpenAI-style: { "data": [ {"id": "gpt-4o-mini"}, ...] }
+                items = data.get('data', []) if isinstance(data, dict) else data
+                for item in items:
+                    model_id = ''
+                    if isinstance(item, dict):
+                        model_id = item.get('id') or item.get('model') or ''
+                    elif isinstance(item, str):
+                        model_id = item
+                    if model_id:
+                        cloud_models.append(model_id)
+            except Exception as e:
+                print(f"⚠️ Could not fetch models from {provider}: {e}")
+                return Response({'error': f'Provider error: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        cloud_models = list(dict.fromkeys(cloud_models))
+        return Response(
+            {
+                'models': cloud_models,
+                'cloud_models': cloud_models,
+                'local_models': [],
             },
             status=status.HTTP_200_OK
         )
